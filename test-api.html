@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Gemini API Test</h1>
+    <button onclick="listModels()">List Available Models</button>
+    <button onclick="testAPI()">Test API Connection</button>
+    <div id="result"></div>
+    
+    <script>
+        const API_KEY = 'AIzaSyBz2pAwjJSDuOl1iAUKFmpdxUps-TqdbCk';
+        
+        async function listModels() {
+            const apis = ['v1beta', 'v1'];
+            document.getElementById('result').innerHTML = 'Loading available models...<br>';
+            
+            for (const api of apis) {
+                const url = `https://generativelanguage.googleapis.com/${api}/models?key=${API_KEY}`;
+                
+                try {
+                    document.getElementById('result').innerHTML += `<br><h3>Checking ${api} API:</h3>`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.models && data.models.length > 0) {
+                        document.getElementById('result').innerHTML += `<p><strong>Found ${data.models.length} models in ${api}:</strong></p>`;
+                        data.models.forEach(model => {
+                            const modelName = model.name.replace('models/', '');
+                            document.getElementById('result').innerHTML += 
+                                `<p>• ${modelName} - ${model.supportedGenerationMethods ? model.supportedGenerationMethods.join(', ') : 'N/A'}</p>`;
+                        });
+                    } else {
+                        document.getElementById('result').innerHTML += `<p>No models found in ${api}</p>`;
+                    }
+                    console.log(`${api} Models:`, data);
+                } catch (error) {
+                    document.getElementById('result').innerHTML += `<p>Error with ${api}: ${error.message}</p>`;
+                    console.error(`${api} Error:`, error);
+                }
+            }
+        }
+        
+        async function testAPI() {
+            // Try different model names - focusing on free tier models
+            // Note: gemini-2.0-flash-exp showed quota error, meaning API key works but free tier has limits
+            const testCases = [
+                // Try with different format for free tier models
+                { api: 'v1beta', model: 'gemini-2.5-pro' }, // This one showed quota error, so it exists!
+                { api: 'v1beta', model: 'gemini-1.5-flash-8b' },
+                { api: 'v1beta', model: 'gemini-1.5-flash-latest' },
+                { api: 'v1beta', model: 'gemini-1.5-pro-latest' },
+                { api: 'v1beta', model: 'gemini-exp-1206' },
+                { api: 'v1beta', model: 'gemini-pro-vision' }
+            ];
+            
+            document.getElementById('result').innerHTML = 'Testing different models and API versions...<br>';
+            
+            const payload = {
+                contents: [{
+                    parts: [{
+                        text: "Say hello in one sentence"
+                    }]
+                }]
+            };
+            
+            for (const testCase of testCases) {
+                const url = `https://generativelanguage.googleapis.com/${testCase.api}/models/${testCase.model}:generateContent?key=${API_KEY}`;
+                
+                try {
+                    document.getElementById('result').innerHTML += `Testing ${testCase.api}/${testCase.model}...<br>`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.candidates && data.candidates[0]) {
+                        const responseText = data.candidates[0].content.parts[0].text;
+                        document.getElementById('result').innerHTML = 
+                            '<h3>✅ SUCCESS!</h3>' +
+                            '<p><strong>Working API:</strong> ' + testCase.api + '</p>' +
+                            '<p><strong>Working Model:</strong> ' + testCase.model + '</p>' +
+                            '<p><strong>Response:</strong> ' + responseText + '</p>' +
+                            '<p>Update your config.js with:</p>' +
+                            '<pre>GEMINI_MODEL: \'' + testCase.model + '\'</pre>' +
+                            '<pre>And use API version: ' + testCase.api + '</pre>';
+                        console.log('✅ Working!', testCase, responseText);
+                        return;
+                    } else {
+                        document.getElementById('result').innerHTML += `❌ ${testCase.api}/${testCase.model}: ${data.error?.message || 'Failed'}<br>`;
+                        console.log('Failed:', testCase, data.error);
+                    }
+                } catch (error) {
+                    document.getElementById('result').innerHTML += `❌ ${testCase.api}/${testCase.model}: ${error.message}<br>`;
+                    console.log('Error:', testCase, error.message);
+                }
+                
+                // Small delay between requests
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            document.getElementById('result').innerHTML += '<br><h3>❌ None of the tested models worked</h3>' +
+                '<p>Please click "List Available Models" to see what models are available with your API key.</p>';
+        }
+    </script>
+</body>
+</html>
+

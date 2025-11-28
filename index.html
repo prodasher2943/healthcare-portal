@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare Portal - Login & Sign Up</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-animation">
+        <div class="circle circle-1"></div>
+        <div class="circle circle-2"></div>
+        <div class="circle circle-3"></div>
+    </div>
+
+    <div class="container">
+        <div class="welcome-card">
+            <div class="card-header">
+                <h1 class="welcome-title">🏥 Healthcare Portal</h1>
+                <p class="welcome-subtitle">Your trusted healthcare companion</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button class="tab-btn active" data-tab="login">Login</button>
+                <button class="tab-btn" data-tab="signup">Sign Up</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="login-form" class="auth-form active">
+                <form id="loginForm" class="form">
+                    <div class="form-group">
+                        <label for="login-email">📧 Email Address</label>
+                        <input type="email" id="login-email" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">🔒 Password</label>
+                        <input type="password" id="login-password" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn-primary">🚀 Login</button>
+                </form>
+                <div id="login-message" class="message"></div>
+            </div>
+
+            <!-- Sign Up Form -->
+            <div id="signup-form" class="auth-form">
+                <div class="role-selection">
+                    <h3>👤 Select Your Role</h3>
+                    <div class="role-buttons">
+                        <button type="button" class="role-btn active" data-role="patient">👤 Patient</button>
+                        <button type="button" class="role-btn" data-role="doctor">👨‍⚕️ Doctor</button>
+                    </div>
+                </div>
+
+                <!-- Patient Sign Up Form -->
+                <form id="patient-signup-form" class="form active-role-form">
+                    <h3>✍️ Register as Patient</h3>
+                    <div class="form-group">
+                        <label for="patient-email">📧 Email Address</label>
+                        <input type="email" id="patient-email" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="patient-password">🔒 Password</label>
+                        <input type="password" id="patient-password" placeholder="Enter a strong password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="patient-confirm-password">🔒 Confirm Password</label>
+                        <input type="password" id="patient-confirm-password" placeholder="Re-enter your password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="patient-name">👤 Full Name</label>
+                        <input type="text" id="patient-name" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="patient-contact">📱 Contact Number</label>
+                        <input type="tel" id="patient-contact" placeholder="+1 234 567 8900" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="patient-bio">📝 Bio Data</label>
+                        <textarea id="patient-bio" rows="4" placeholder="Age, gender, medical history, allergies, etc." required></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary">🚀 Sign Up</button>
+                </form>
+
+                <!-- Doctor Sign Up Form -->
+                <form id="doctor-signup-form" class="form active-role-form" style="display: none;">
+                    <h3>✍️ Register as Doctor</h3>
+                    <div class="form-group">
+                        <label for="doctor-email">📧 Email Address</label>
+                        <input type="email" id="doctor-email" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-password">🔒 Password</label>
+                        <input type="password" id="doctor-password" placeholder="Enter a strong password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-confirm-password">🔒 Confirm Password</label>
+                        <input type="password" id="doctor-confirm-password" placeholder="Re-enter your password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-name">👤 Full Name</label>
+                        <input type="text" id="doctor-name" placeholder="Dr. Jane Smith" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-contact">📱 Contact Number</label>
+                        <input type="tel" id="doctor-contact" placeholder="+1 234 567 8900" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-specialization">🎓 Specialization</label>
+                        <input type="text" id="doctor-specialization" placeholder="Cardiology, Neurology, etc." required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-license">🆔 Medical License Number</label>
+                        <input type="text" id="doctor-license" placeholder="MD-XXXXX" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-experience">💼 Years of Experience</label>
+                        <input type="number" id="doctor-experience" min="0" max="50" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-bio">📝 Professional Bio</label>
+                        <textarea id="doctor-bio" rows="4" placeholder="Your professional background and expertise..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctor-proof">📄 Proof of Education</label>
+                        <div class="file-upload-wrapper">
+                            <input type="file" id="doctor-proof" accept=".pdf,.png,.jpg,.jpeg" required>
+                            <label for="doctor-proof" class="file-upload-label">
+                                <span>📁 Upload Document (PDF, PNG, JPG)</span>
+                                <span class="file-name"></span>
+                            </label>
+                        </div>
+                        <small>Please upload your medical degree, license, or certification document.</small>
+                    </div>
+                    <button type="submit" class="btn-primary">🚀 Sign Up</button>
+                </form>
+
+                <div id="signup-message" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

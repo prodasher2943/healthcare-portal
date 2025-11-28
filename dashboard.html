@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healthcare Portal - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-animation">
+        <div class="circle circle-1"></div>
+        <div class="circle circle-2"></div>
+        <div class="circle circle-3"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <nav class="dashboard-nav">
+            <div class="nav-brand">
+                <h2>🏥 Healthcare Portal</h2>
+            </div>
+            <button class="btn-logout" onclick="logout()">🚪 Logout</button>
+        </nav>
+
+        <div class="dashboard-content">
+            <!-- Patient Dashboard -->
+            <div id="patient-dashboard" style="display: none;">
+                <div class="dashboard-header">
+                    <h1 id="welcome-message">Welcome!</h1>
+                    <p id="user-type-display">You are logged in as a Patient</p>
+                    <button onclick="checkUserAccount()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer;">🔍 Check My Account</button>
+                </div>
+
+                <div class="patient-layout">
+                    <!-- Left Side: Medicine Schedule -->
+                    <div class="medicine-schedule-panel">
+                        <div class="panel-header">
+                            <h3>💊 Medicine Schedule</h3>
+                        </div>
+                        <div class="panel-content">
+                            <div id="medicine-schedule-list">
+                                <!-- Medicines will be loaded here -->
+                            </div>
+                            <!-- Medicine add button removed - only doctors can prescribe medicines -->
+                        </div>
+                    </div>
+
+                    <!-- Middle: AI Doctor Chatbot -->
+                    <div class="chatbot-panel">
+                        <div class="panel-header">
+                            <div class="chat-header-left">
+                                <button class="btn-chat-menu" onclick="toggleChatList()" title="Show all chats">⋮</button>
+                                <h3 id="chat-title">🤖 AI Doctor Assistant</h3>
+                            </div>
+                            <div class="chat-header-right">
+                                <span class="ai-status">Online</span>
+                                <button class="btn-new-chat" onclick="createNewChat()" title="Start new chat">+ New Chat</button>
+                            </div>
+                        </div>
+                        <!-- Chat List Dropdown -->
+                        <div id="chat-list-dropdown" class="chat-list-dropdown" style="display: none;">
+                            <div class="chat-list-header">
+                                <h4>Your Chats</h4>
+                                <button class="btn-close-chat-list" onclick="toggleChatList()">×</button>
+                            </div>
+                            <div id="chat-list-items" class="chat-list-items">
+                                <!-- Chat list items will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="chat-container">
+                            <div id="chat-messages" class="chat-messages">
+                                <div class="message bot-message">
+                                    <div class="message-avatar">🤖</div>
+                                    <div class="message-content">
+                                        <p>Hello! I'm your AI Doctor Assistant. I'm here to help you with health concerns, diagnosis, treatment suggestions, and medication information. How can I assist you today?</p>
+                                        <small class="message-time"></small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="chat-input-container">
+                                <input type="text" id="chat-input" class="chat-input" placeholder="Describe your symptoms or ask a health question..." onkeypress="handleChatKeyPress(event)">
+                                <button class="btn-send" onclick="sendMessage()">📤</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Side: Consultation Panel -->
+                    <div class="consultation-panel">
+                        <div class="panel-header">
+                            <h3>👨‍⚕️ Consult Doctor</h3>
+                        </div>
+                        <div class="panel-content" id="consultation-content">
+                            <div class="consultation-placeholder">
+                                <p>Complete AI diagnosis to consult with a real doctor</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Doctor Dashboard -->
+            <div id="doctor-dashboard" style="display: none;">
+                <div class="dashboard-header">
+                    <h1 id="doctor-welcome-message">Welcome!</h1>
+                    <p id="doctor-type-display">You are logged in as a Doctor</p>
+                </div>
+
+                <div class="doctor-layout">
+                    <!-- Consultation Requests -->
+                    <div class="requests-panel">
+                        <div class="panel-header">
+                            <h3>📋 Consultation Requests</h3>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn-refresh" onclick="debugConsultations()">🔍 Debug</button>
+                                <button class="btn-refresh" onclick="loadConsultationRequests()">🔄 Refresh</button>
+                            </div>
+                        </div>
+                        <div class="panel-content" id="requests-list">
+                            <!-- Requests will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Consultation History -->
+                    <div class="history-panel">
+                        <div class="panel-header">
+                            <h3>📜 Consultation History</h3>
+                        </div>
+                        <div class="panel-content" id="history-list">
+                            <!-- History will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Medicine Modal -->
+    <div id="medicine-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeMedicineModal()">&times;</span>
+            <h2>💊 Add Medicine</h2>
+            <form id="add-medicine-form" onsubmit="addMedicine(event)">
+                <div class="form-group">
+                    <label>Medicine Name</label>
+                    <input type="text" id="med-name" required placeholder="e.g., Paracetamol 500mg">
+                </div>
+                <div class="form-group">
+                    <label>Dosage</label>
+                    <input type="text" id="med-dosage" required placeholder="e.g., 1 tablet">
+                </div>
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select id="med-frequency" required>
+                        <option value="">Select frequency</option>
+                        <option value="Once daily">Once daily</option>
+                        <option value="Twice daily">Twice daily</option>
+                        <option value="Thrice daily">Thrice daily</option>
+                        <option value="Every 4 hours">Every 4 hours</option>
+                        <option value="Every 6 hours">Every 6 hours</option>
+                        <option value="Every 8 hours">Every 8 hours</option>
+                        <option value="As needed">As needed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Start Date</label>
+                    <input type="date" id="med-start-date" required>
+                </div>
+                <div class="form-group">
+                    <label>End Date</label>
+                    <input type="date" id="med-end-date" required>
+                </div>
+                <div class="form-group">
+                    <label>Times (e.g., 8:00 AM, 2:00 PM)</label>
+                    <input type="text" id="med-times" required placeholder="8:00 AM, 2:00 PM, 8:00 PM">
+                    <small>Separate times with commas</small>
+                </div>
+                <div class="form-group">
+                    <label>Prescribed By</label>
+                    <input type="text" id="med-prescribed-by" required placeholder="Doctor's name">
+                </div>
+                <button type="submit" class="btn-primary">Add Medicine</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Consultation Request Modal -->
+    <div id="consultation-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeConsultationModal()">&times;</span>
+            <h2>📞 Request Consultation</h2>
+            <div id="consultation-summary-display"></div>
+            <div id="patient-info-display"></div>
+            <div id="available-doctors"></div>
+        </div>
+    </div>
+
+    <!-- Video Call Screen (Placeholder) -->
+    <div id="video-call-screen" class="video-call-container" style="display: none;">
+        <div class="video-call-header">
+            <h2>📹 Video Consultation</h2>
+            <button class="btn-end-call" onclick="endVideoCall()">End Call</button>
+        </div>
+        <div class="video-call-content">
+            <div id="call-participant-info"></div>
+            <div class="video-placeholder">
+                <p>🎥 Video call interface will be implemented here</p>
+                <p id="call-details"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="script.js"></script>
+    <script src="config.js"></script>
+    <script src="api-client.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

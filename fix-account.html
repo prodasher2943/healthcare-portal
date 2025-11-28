@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Account Type</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #667eea; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #764ba2; }
+        .danger { background: #dc3545; }
+        .danger:hover { background: #c82333; }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .fix-option {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix Account Type Issue</h1>
+        
+        <div class="info">
+            <strong>Problem:</strong> You're logged in as a patient but the system thinks you're a doctor.
+        </div>
+
+        <button onclick="checkAccount()">🔍 Check My Account</button>
+        <button onclick="fixAccountType()" class="danger">🔧 Fix Account Type</button>
+        <button onclick="clearAll()" class="danger">🗑️ Clear All & Start Fresh</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function showResult(message) {
+            const results = document.getElementById('results');
+            results.textContent += message + '\n';
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function checkAccount() {
+            document.getElementById('results').textContent = '';
+            showResult('=== CHECKING ACCOUNT ===\n');
+            
+            const userData = JSON.parse(localStorage.getItem('currentUser') || 'null');
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+            
+            if (!userData) {
+                showResult('❌ No user logged in.');
+                showResult('Please login first.');
+                return;
+            }
+            
+            showResult(`Logged In Email: ${userData.email}`);
+            showResult(`Session User Type: "${userData.user_type}"`);
+            showResult(`Session Name: ${userData.user_data?.name || 'N/A'}\n`);
+            
+            const dbUser = usersDB[userData.email];
+            if (dbUser) {
+                showResult(`Database User Type: "${dbUser.user_type}"`);
+                showResult(`Database Name: ${dbUser.user_data?.name || 'N/A'}`);
+                
+                if (dbUser.user_type !== userData.user_type) {
+                    showResult('\n⚠️ MISMATCH DETECTED!');
+                    showResult('Session and database have different user types.');
+                } else {
+                    showResult('\n✅ User types match.');
+                }
+            } else {
+                showResult('\n❌ User not found in database!');
+            }
+        }
+
+        function fixAccountType() {
+            const userData = JSON.parse(localStorage.getItem('currentUser') || 'null');
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+            
+            if (!userData) {
+                alert('Please login first.');
+                return;
+            }
+            
+            const dbUser = usersDB[userData.email];
+            if (!dbUser) {
+                alert('User not found in database.');
+                return;
+            }
+            
+            const currentType = prompt(`Current user type: "${dbUser.user_type}"\n\nEnter correct user type:\n- Type "Patient" for patient account\n- Type "Doctor" for doctor account`, dbUser.user_type);
+            
+            if (!currentType) return;
+            
+            // Update in database
+            usersDB[userData.email].user_type = currentType.trim();
+            localStorage.setItem('usersDB', JSON.stringify(usersDB));
+            
+            // Update in session
+            userData.user_type = currentType.trim();
+            localStorage.setItem('currentUser', JSON.stringify(userData));
+            
+            alert(`✅ Account type updated to "${currentType.trim()}"\n\nPlease refresh the page.`);
+            showResult(`✅ Account type changed to: "${currentType.trim()}"`);
+        }
+
+        function clearAll() {
+            if (confirm('⚠️ This will clear ALL data including all user accounts. Are you sure?')) {
+                localStorage.clear();
+                alert('✅ All data cleared. Please register/login again.');
+                window.location.href = 'index.html';
+            }
+        }
+
+        window.onload = function() {
+            checkAccount();
+        };
+    </script>
+</body>
+</html>
+
