@@ -1648,9 +1648,23 @@ function startCallEndPolling() {
     }
     
     // Poll every 1 second to check if call was ended by other party
-    callEndPollInterval = setInterval(() => {
+    callEndPollInterval = setInterval(async () => {
         if (!currentCallId) return;
         
+        // Check API first (for global synchronization)
+        try {
+            const callStatus = await getCallStatus(currentCallId);
+            if (callStatus && callStatus.ended) {
+                // Call was ended by other party via API
+                endVideoCall();
+                return;
+            }
+        } catch (error) {
+            // Fallback to localStorage if API fails
+            console.log('API call status check failed, using localStorage fallback:', error);
+        }
+        
+        // Also check localStorage as fallback
         const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
         const call = activeCalls[currentCallId];
         

@@ -258,8 +258,34 @@ async function endCall(callId) {
             method: 'POST',
             body: JSON.stringify({ callId })
         });
+        // Also update localStorage as fallback
+        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+        if (activeCalls[callId]) {
+            activeCalls[callId].ended = true;
+            activeCalls[callId].endTime = new Date().toISOString();
+            localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+        }
     } catch (error) {
         console.error('Failed to end call on server:', error);
+        // Fallback to localStorage
+        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+        if (activeCalls[callId]) {
+            activeCalls[callId].ended = true;
+            activeCalls[callId].endTime = new Date().toISOString();
+            localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+        }
+    }
+}
+
+// Get call status from API
+async function getCallStatus(callId) {
+    try {
+        const status = await apiRequest(`/calls/${callId}`, { method: 'GET' });
+        return status;
+    } catch (error) {
+        // Fallback to localStorage
+        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+        return activeCalls[callId] || { ended: false };
     }
 }
 
