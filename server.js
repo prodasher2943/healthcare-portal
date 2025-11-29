@@ -253,12 +253,34 @@ app.get('/api/calls/:callId', (req, res) => {
 // Get online doctors
 app.get('/api/doctors/online', (req, res) => {
     const onlineDoctors = [];
+    
+    // Iterate through all online users
     onlineUsers.forEach((socketId, email) => {
+        // Get user from usersDB
         const user = usersDB[email];
-        if (user && typeof user.user_type === 'string' && user.user_type.toLowerCase() === 'doctor') {
+        
+        if (!user) {
+            console.log(`⚠️ User ${email} is online but not in usersDB`);
+            return;
+        }
+        
+        // Check multiple ways the user type might be stored
+        const userType = user?.user_type || user?.userType;
+        const isDoctor = user && (
+            (typeof userType === 'string' && userType.toLowerCase() === 'doctor') ||
+            user.user_type === 'Doctor' ||
+            user.userType === 'Doctor'
+        );
+        
+        if (isDoctor) {
             onlineDoctors.push(email);
+            console.log(`📡 Online doctor found: ${email} (socket: ${socketId}, type: ${userType})`);
+        } else {
+            console.log(`ℹ️ User ${email} is online but not a doctor (type: ${userType})`);
         }
     });
+    
+    console.log(`📡 API: Returning ${onlineDoctors.length} online doctors:`, onlineDoctors);
     res.json(onlineDoctors);
 });
 
@@ -296,8 +318,13 @@ io.on('connection', (socket) => {
             registered_date: existing?.registered_date || new Date().toISOString()
         };
         
-        // Notify others if doctor came online
-        if (finalType.toLowerCase() === 'doctor') {
+        // Notify others if doctor came online - check both normalized and original types
+        const isDoctor = finalType.toLowerCase() === 'doctor' || 
+                        (typeof userType === 'string' && userType.toLowerCase() === 'doctor') ||
+                        (existing && existing.user_type && existing.user_type.toLowerCase() === 'doctor');
+        
+        if (isDoctor) {
+            console.log(`📢 Broadcasting doctor online: ${email}`);
             io.emit('doctorOnline', email);
         }
     });

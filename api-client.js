@@ -65,10 +65,15 @@ function initSocket() {
             const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
             const fullUserInfo = usersDB[userData.email] || userData;
             
+            const userTypeToSend = userData.user_type || fullUserInfo.user_type;
+            const userDataToSend = fullUserInfo.user_data || userData.user_data || {};
+            
+            console.log(`📡 Emitting userOnline: ${userData.email}, type: ${userTypeToSend}`);
+            
             socket.emit('userOnline', {
                 email: userData.email,
-                userType: userData.user_type || fullUserInfo.user_type,
-                userData: fullUserInfo.user_data || userData.user_data || {}
+                userType: userTypeToSend,
+                userData: userDataToSend
             });
         }
     });
@@ -197,24 +202,36 @@ function initSocket() {
     
     // Listen for doctor online/offline status
     socket.on('doctorOnline', (email) => {
-        if (onlineDoctors) {
+        console.log(`✅ Doctor came online via Socket.io: ${email}`);
+        if (typeof onlineDoctors !== 'undefined' && onlineDoctors) {
             onlineDoctors.add(email);
+            console.log(`📊 Updated online doctors set, now has ${onlineDoctors.size} doctors`);
+            
             // Refresh doctor list if consultation modal is open
             const consultationModal = document.getElementById('consultation-modal');
             if (consultationModal && consultationModal.style.display === 'block') {
+                console.log('🔄 Refreshing doctor list due to doctor online event');
                 loadAvailableDoctors();
             }
+        } else {
+            console.warn('⚠️ onlineDoctors Set not available yet');
         }
     });
     
     socket.on('doctorOffline', (email) => {
-        if (onlineDoctors) {
+        console.log(`❌ Doctor went offline via Socket.io: ${email}`);
+        if (typeof onlineDoctors !== 'undefined' && onlineDoctors) {
             onlineDoctors.delete(email);
+            console.log(`📊 Updated online doctors set, now has ${onlineDoctors.size} doctors`);
+            
             // Refresh doctor list if consultation modal is open
             const consultationModal = document.getElementById('consultation-modal');
             if (consultationModal && consultationModal.style.display === 'block') {
+                console.log('🔄 Refreshing doctor list due to doctor offline event');
                 loadAvailableDoctors();
             }
+        } else {
+            console.warn('⚠️ onlineDoctors Set not available yet');
         }
     });
     

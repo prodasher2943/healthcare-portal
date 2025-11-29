@@ -857,6 +857,22 @@ function showConsultationModal() {
     loadAvailableDoctors();
     
     modal.style.display = 'block';
+    
+    // Refresh online doctors list when modal opens to ensure latest status
+    setTimeout(() => {
+        // Refresh after a short delay to ensure Socket.io is connected
+        if (typeof getOnlineDoctors === 'function') {
+            getOnlineDoctors().then(onlineDoctorsList => {
+                if (onlineDoctorsList && onlineDoctorsList.size > 0) {
+                    onlineDoctorsList.forEach(email => onlineDoctors.add(email));
+                    console.log(`🔄 Refreshed online doctors when opening modal: ${onlineDoctors.size} doctors`);
+                    loadAvailableDoctors(); // Reload the list with updated online status
+                }
+            }).catch(err => {
+                console.error('Error refreshing online doctors:', err);
+            });
+        }
+    }, 500); // Small delay to ensure socket is connected
 }
 
 function closeConsultationModal() {
@@ -896,12 +912,21 @@ async function loadAvailableDoctors() {
         consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
     }
     
-    // Get online doctors from API
+    // Get online doctors from API (merge with existing Socket.io updates, don't replace)
     try {
         const onlineDoctorsList = await getOnlineDoctors();
-        onlineDoctors = onlineDoctorsList;
+        // Merge API results with existing Socket.io real-time updates
+        if (onlineDoctorsList && onlineDoctorsList.size > 0) {
+            onlineDoctorsList.forEach(email => {
+                onlineDoctors.add(email);
+            });
+            console.log(`📡 Fetched ${onlineDoctorsList.size} online doctors from server, total now: ${onlineDoctors.size}`);
+        } else {
+            console.log('📡 No online doctors found in API response');
+        }
     } catch (error) {
-        // Fallback - use existing onlineDoctors set
+        console.error('Error fetching online doctors from API:', error);
+        // Keep existing onlineDoctors set from Socket.io events
     }
     
     // Get all doctors and store in cache
@@ -963,6 +988,20 @@ function filterDoctors(searchQuery) {
     }
     
     const query = searchQuery.toLowerCase().trim();
+    
+    // Refresh online doctors from API before filtering (to ensure latest status)
+    // Do this in background - don't block search
+    if (typeof getOnlineDoctors === 'function') {
+        getOnlineDoctors().then(onlineDoctorsList => {
+            if (onlineDoctorsList && onlineDoctorsList.size > 0) {
+                onlineDoctorsList.forEach(email => onlineDoctors.add(email));
+                // Re-render with updated online status (don't re-filter to avoid recursion)
+                renderDoctors(currentlyDisplayedDoctors, true);
+            }
+        }).catch(err => {
+            console.error('Error fetching online doctors during search:', err);
+        });
+    }
     
     // Search through ALL doctors (not just consulted/online)
     const filtered = allDoctorsCache.filter(doctor => {
@@ -1690,10 +1729,16 @@ async function startVideoCall(consultation) {
         callIdToUse = currentCallId;
     }
     
-    // Hide dashboards and show video call screen
+    // Hide dashboards and show video call screen IMMEDIATELY
     document.getElementById('patient-dashboard').style.display = 'none';
     document.getElementById('doctor-dashboard').style.display = 'none';
     document.getElementById('video-call-screen').style.display = 'flex';
+    
+    // OPTIMIZATION: Start video stream initialization IMMEDIATELY (don't wait for other setup)
+    // This will make local video appear as soon as possible
+    initializeVideoStreams().catch(err => {
+        console.error('Error initializing video streams early:', err);
+    });
     
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
     
@@ -1916,8 +1961,14 @@ async function startVideoCall(consultation) {
         remoteVideo.muted = false;
     }
     
-    // Initialize video streams with WebRTC
-    initializeVideoStreams();
+    // Video streams already started at the beginning of this function
+    // Only reinitialize if it hasn't started yet (shouldn't happen, but safety check)
+    if (!localStream) {
+        console.log('⚠️ Video stream not started yet, initializing now...');
+        initializeVideoStreams().catch(err => {
+            console.error('Error initializing video streams:', err);
+        });
+    }
     
     // Start call timer
     callStartTime = new Date();
@@ -2002,8 +2053,16 @@ const pcConfig = {
 
 // Initialize video streams with WebRTC
 async function initializeVideoStreams() {
+    // Prevent multiple simultaneous initializations
+    if (initializeVideoStreams.inProgress) {
+        console.log('⚠️ Video stream initialization already in progress, skipping...');
+        return;
+    }
+    
+    initializeVideoStreams.inProgress = true;
+    
     try {
-        // Request user media with initial camera
+        // Request user media with initial camera - OPTIMIZED for speed
         const initialConstraints = {
             video: { 
                 width: { ideal: 1280 },
@@ -2016,22 +2075,18 @@ async function initializeVideoStreams() {
             }
         };
         
+        console.log('🎥 Requesting camera/microphone access...');
         localStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
+        console.log('✅ Camera/microphone access granted');
         
-        // After getting stream, enumerate devices to get proper labels
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        availableCameras = devices.filter(device => device.kind === 'videoinput');
-        
-        console.log(`Found ${availableCameras.length} camera(s) available`);
-        
-        // Display local video
+        // Display local video IMMEDIATELY - don't wait for device enumeration
         const localVideo = document.getElementById('local-video');
         if (localVideo) {
             localVideo.srcObject = localStream;
             localVideo.muted = true; // Mute local to avoid feedback
-            await localVideo.play().catch(err => console.log('Local video play error:', err));
+            localVideo.play().catch(err => console.log('Local video play error:', err));
             
-            // Hide placeholder
+            // Hide placeholder immediately
             const placeholder = document.getElementById('local-video-placeholder');
             if (placeholder) placeholder.style.display = 'none';
             
@@ -2040,7 +2095,17 @@ async function initializeVideoStreams() {
             if (localVideoBox) {
                 localVideoBox.setAttribute('data-video-active', 'true');
             }
+            
+            console.log('✅ Local video displayed immediately');
         }
+        
+        // Enumerate devices in parallel (non-blocking) after video is already showing
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            availableCameras = devices.filter(device => device.kind === 'videoinput');
+            console.log(`📷 Found ${availableCameras.length} camera(s) available`);
+        }).catch(err => {
+            console.error('Error enumerating devices:', err);
+        });
         
         // Create peer connection if it doesn't exist
         if (!peerConnection) {
@@ -2102,7 +2167,7 @@ async function initializeVideoStreams() {
                 console.warn('⚠️ No video tracks in local stream');
             }
             
-            // Start WebRTC connection
+            // Start WebRTC connection immediately
             await startWebRTCConnection();
         }
         
@@ -2115,6 +2180,9 @@ async function initializeVideoStreams() {
                 pTag.textContent = 'Camera unavailable - Please allow camera/microphone access';
             }
         }
+    } finally {
+        // Clear the in-progress flag
+        initializeVideoStreams.inProgress = false;
     }
 }
 
@@ -2281,8 +2349,14 @@ async function startWebRTCConnection() {
             // Doctor creates offer (caller)
             console.log('📞 Doctor creating offer...');
             
-            // Wait a moment to ensure peer connection is fully set up
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Reduced delay - peer connection should be ready already
+            // Only wait if connection state indicates it needs time
+            if (peerConnection.signalingState === 'stable' && peerConnection.getSenders().length > 0) {
+                // Already ready, proceed immediately
+            } else {
+                // Give a tiny delay for tracks to be added
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
             
             const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
@@ -2967,7 +3041,20 @@ function startOnlineStatusPolling() {
         // Refresh doctor list if consultation modal is open
         const consultationModal = document.getElementById('consultation-modal');
         if (consultationModal && consultationModal.style.display === 'block') {
-            loadAvailableDoctors();
+            // Also refresh online doctors from API to ensure we have the latest
+            if (typeof getOnlineDoctors === 'function') {
+                getOnlineDoctors().then(onlineDoctorsList => {
+                    if (onlineDoctorsList && onlineDoctorsList.size > 0) {
+                        onlineDoctorsList.forEach(email => onlineDoctors.add(email));
+                    }
+                    loadAvailableDoctors();
+                }).catch(err => {
+                    console.error('Error fetching online doctors in polling:', err);
+                    loadAvailableDoctors(); // Still refresh even if API fails
+                });
+            } else {
+                loadAvailableDoctors();
+            }
         }
     }, 30000); // Every 30 seconds
 }
