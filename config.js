@@ -3,7 +3,7 @@
 // Replace 'YOUR_GEMINI_API_KEY' with your actual API key
 
 const CONFIG = {
-    GEMINI_API_KEY: 'AIzaSyCAHoo7r_jxNhSbIyVazDqScwar9etZWoo', // Replace with your Gemini API key
+    GEMINI_API_KEY: 'AIzaSyBLWqHFr5cPjBDOCAOJY9IfrLRJEianuKg', // Replace with your Gemini API key
     // Working model - gemini-2.5-pro confirmed working with your API key!
     GEMINI_MODEL: 'gemini-2.5-pro', // ✅ Tested and working!
     GEMINI_API_URL: function() {
