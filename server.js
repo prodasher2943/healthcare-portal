@@ -12,7 +12,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        credentials: true
     }
 });
 
@@ -24,7 +25,12 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-app.use(express.static(__dirname)); // Serve static files
+// Serve static files (CSS, JS, images, etc.)
+// This must come before the catch-all route
+app.use(express.static(__dirname, {
+    index: false, // Don't serve index.html automatically (we handle it explicitly)
+    extensions: ['html', 'js', 'css', 'json', 'png', 'jpg', 'jpeg', 'gif', 'svg']
+}));
 
 // In-memory storage (replace with database in production)
 let usersDB = {};
@@ -223,8 +229,22 @@ io.on('connection', (socket) => {
     });
 });
 
-// Serve the dashboard
+// Serve index.html for root and dashboard
 app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/dashboard.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
+// Catch-all: serve index.html for any non-API routes (for SPA routing)
+app.get('*', (req, res) => {
+    // Don't serve HTML for API routes
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    // Serve index.html for all other routes (SPA fallback)
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 

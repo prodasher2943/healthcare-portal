@@ -16,13 +16,15 @@ function getApiBaseUrl() {
         // Use localhost for local development
         return 'http://localhost:3000';
     } else {
-        // Use deployed server URL for production
-        return 'https://web-production-33464.up.railway.app';
+        // When deployed (Railway, etc.), use the same origin as the frontend
+        // This ensures the API is accessible from the same domain
+        return window.location.origin;
     }
 }
 
 const API_BASE_URL = getApiBaseUrl();
 console.log('API Base URL:', API_BASE_URL);
+console.log('Current origin:', window.location.origin);
 
 // Initialize Socket.io connection
 let socket = null;
