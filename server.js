@@ -149,7 +149,8 @@ app.get('/api/calls/:callId', (req, res) => {
 app.get('/api/doctors/online', (req, res) => {
     const onlineDoctors = [];
     onlineUsers.forEach((socketId, email) => {
-        if (usersDB[email] && usersDB[email].user_type === 'Doctor') {
+        const user = usersDB[email];
+        if (user && typeof user.user_type === 'string' && user.user_type.toLowerCase() === 'doctor') {
             onlineDoctors.push(email);
         }
     });
@@ -162,14 +163,30 @@ io.on('connection', (socket) => {
     
     // User goes online
     socket.on('userOnline', ({ email, userType }) => {
+        if (!email) return;
+
         onlineUsers.set(email, socket.id);
         socket.email = email;
         socket.userType = userType;
         
         console.log(`User online: ${email} (${userType})`);
+
+        // Ensure usersDB has at least a minimal record so this user can be recognized globally
+        const existing = usersDB[email];
+        const normalizedType = typeof userType === 'string' ? userType : (existing?.user_type || 'User');
+        const finalType = normalizedType === 'doctor' ? 'Doctor'
+                        : normalizedType === 'patient' ? 'Patient'
+                        : normalizedType;
+
+        usersDB[email] = {
+            email,
+            user_data: existing?.user_data || {},
+            user_type: finalType,
+            registered_date: existing?.registered_date || new Date().toISOString()
+        };
         
         // Notify others if doctor came online
-        if (userType === 'Doctor') {
+        if (finalType.toLowerCase() === 'doctor') {
             io.emit('doctorOnline', email);
         }
     });

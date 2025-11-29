@@ -220,6 +220,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await localLoginUser(email, password);
             
             if (result.success) {
+                // Notify backend that this user is online (for global presence)
+                try {
+                    if (typeof socket !== 'undefined' && socket && socket.connected) {
+                        const users = getUsersDB();
+                        const userType = users[email]?.user_type || 'Patient';
+                        socket.emit('userOnline', { email, userType });
+                    }
+                } catch (err) {
+                    console.error('Error emitting userOnline after login:', err);
+                }
+
                 showMessage('login-message', `✅ ${result.message} Redirecting...`, 'success');
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
@@ -279,6 +290,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Auto login after registration (local)
                 await localLoginUser(email, password);
+
+                // Let backend know this user is online
+                try {
+                    if (typeof socket !== 'undefined' && socket && socket.connected) {
+                        socket.emit('userOnline', { email, userType: 'Patient' });
+                    }
+                } catch (err) {
+                    console.error('Error emitting userOnline after patient signup:', err);
+                }
+
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
                 }, 1000);
@@ -350,6 +371,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Auto login after registration (local)
                 await localLoginUser(email, password);
+
+                // Let backend know this user is online (as doctor)
+                try {
+                    if (typeof socket !== 'undefined' && socket && socket.connected) {
+                        socket.emit('userOnline', { email, userType: 'Doctor' });
+                    }
+                } catch (err) {
+                    console.error('Error emitting userOnline after doctor signup:', err);
+                }
+
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
                 }, 1000);
