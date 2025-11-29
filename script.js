@@ -32,45 +32,82 @@ function saveUsersDB(users) {
 
 // Register a new user (local storage)
 async function localRegisterUser(email, password, userType, userData) {
-    const users = getUsersDB();
-    
-    if (users[email]) {
-        return { success: false, message: 'Email already registered. Please login instead.' };
+    try {
+        const users = getUsersDB();
+        
+        if (users[email]) {
+            return { success: false, message: 'Email already registered. Please login instead.' };
+        }
+        
+        const hashedPassword = await hashPassword(password);
+        
+        // Debug logging (remove in production)
+        console.log('Registration:', {
+            email: email,
+            passwordLength: password.length,
+            hashedPasswordLength: hashedPassword.length,
+            userType: userType
+        });
+        
+        users[email] = {
+            password: hashedPassword,
+            user_type: userType,
+            user_data: userData,
+            registered_date: new Date().toISOString()
+        };
+        
+        saveUsersDB(users);
+        
+        // Verify the user was saved
+        const savedUsers = getUsersDB();
+        if (!savedUsers[email]) {
+            console.error('User was not saved to localStorage!');
+            return { success: false, message: 'Registration failed. Please try again.' };
+        }
+        
+        return { success: true, message: 'Registration successful!' };
+    } catch (error) {
+        console.error('Error in localRegisterUser:', error);
+        return { success: false, message: 'An error occurred during registration. Please try again.' };
     }
-    
-    const hashedPassword = await hashPassword(password);
-    users[email] = {
-        password: hashedPassword,
-        user_type: userType,
-        user_data: userData,
-        registered_date: new Date().toISOString()
-    };
-    
-    saveUsersDB(users);
-    return { success: true, message: 'Registration successful!' };
 }
 
 // Login user (local storage)
 async function localLoginUser(email, password) {
-    const users = getUsersDB();
-    
-    if (!users[email]) {
-        return { success: false, message: 'Email not found. Please register first.' };
+    try {
+        const users = getUsersDB();
+        
+        if (!users[email]) {
+            return { success: false, message: 'Email not found. Please register first.' };
+        }
+        
+        const hashedPassword = await hashPassword(password);
+        const storedPassword = users[email].password;
+        
+        // Debug logging (remove in production)
+        console.log('Login attempt:', {
+            email: email,
+            passwordLength: password.length,
+            storedPasswordLength: storedPassword ? storedPassword.length : 0,
+            passwordsMatch: storedPassword === hashedPassword
+        });
+        
+        if (storedPassword !== hashedPassword) {
+            return { success: false, message: 'Incorrect password. Please try again.' };
+        }
+        
+        // Store current user in sessionStorage (tab-specific, so each tab can have different user)
+        sessionStorage.setItem('currentUser', JSON.stringify({
+            email: email,
+            user_type: users[email].user_type,
+            user_data: users[email].user_data
+        }));
+        
+        return { success: true, message: 'Login successful!' };
+    } catch (error) {
+        console.error('Error in localLoginUser:', error);
+        return { success: false, message: 'An error occurred during login. Please try again.' };
     }
-    
-    const hashedPassword = await hashPassword(password);
-    if (users[email].password !== hashedPassword) {
-        return { success: false, message: 'Incorrect password. Please try again.' };
-    }
-    
-    // Store current user in sessionStorage (tab-specific, so each tab can have different user)
-    sessionStorage.setItem('currentUser', JSON.stringify({
-        email: email,
-        user_type: users[email].user_type,
-        user_data: users[email].user_data
-    }));
-    
-    return { success: true, message: 'Login successful!' };
 }
 
 // Show message
@@ -209,11 +246,15 @@ document.addEventListener('DOMContentLoaded', function() {
         loginFormEl.addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            // Mark form as submitting to prevent redirect check interference
+            loginFormEl.classList.add('submitting');
+            
             const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
             
             if (!email || !password) {
                 showMessage('login-message', '⚠️ Please enter both email and password.', 'error');
+                loginFormEl.classList.remove('submitting');
                 return;
             }
             
@@ -232,11 +273,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 showMessage('login-message', `✅ ${result.message} Redirecting...`, 'success');
+                // Clear any redirect flags to prevent interference
+                sessionStorage.removeItem('redirecting');
+                sessionStorage.removeItem('redirectTimestamp');
+                // Redirect immediately
                 setTimeout(() => {
+                    loginFormEl.classList.remove('submitting');
                     window.location.href = 'dashboard.html';
-                }, 1000);
+                }, 500);
             } else {
                 showMessage('login-message', `❌ ${result.message}`, 'error');
+                loginFormEl.classList.remove('submitting');
             }
         });
     }
@@ -246,6 +293,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (patientSignupForm) {
         patientSignupForm.addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // Mark form as submitting to prevent redirect check interference
+            patientSignupForm.classList.add('submitting');
             
             const email = document.getElementById('patient-email').value.trim();
             const password = document.getElementById('patient-password').value;
@@ -289,7 +339,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Auto login after registration (local)
-                await localLoginUser(email, password);
+                const loginResult = await localLoginUser(email, password);
+                
+                if (!loginResult.success) {
+                    showMessage('signup-message', `⚠️ Registration successful but auto-login failed. Please login manually.`, 'error');
+                    patientSignupForm.classList.remove('submitting');
+                    return;
+                }
 
                 // Let backend know this user is online
                 try {
@@ -300,11 +356,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Error emitting userOnline after patient signup:', err);
                 }
 
+                // Clear any redirect flags to prevent interference
+                sessionStorage.removeItem('redirecting');
+                sessionStorage.removeItem('redirectTimestamp');
+                // Redirect immediately
                 setTimeout(() => {
+                    patientSignupForm.classList.remove('submitting');
                     window.location.href = 'dashboard.html';
-                }, 1000);
+                }, 500);
             } else {
                 showMessage('signup-message', `❌ ${result.message}`, 'error');
+                patientSignupForm.classList.remove('submitting');
             }
         });
     }
@@ -314,6 +376,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (doctorSignupForm) {
         doctorSignupForm.addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // Mark form as submitting to prevent redirect check interference
+            doctorSignupForm.classList.add('submitting');
             
             const email = document.getElementById('doctor-email').value.trim();
             const password = document.getElementById('doctor-password').value;
@@ -370,7 +435,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Auto login after registration (local)
-                await localLoginUser(email, password);
+                const loginResult = await localLoginUser(email, password);
+                
+                if (!loginResult.success) {
+                    showMessage('signup-message', `⚠️ Registration successful but auto-login failed. Please login manually.`, 'error');
+                    doctorSignupForm.classList.remove('submitting');
+                    return;
+                }
 
                 // Let backend know this user is online (as doctor)
                 try {
@@ -381,11 +452,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Error emitting userOnline after doctor signup:', err);
                 }
 
+                // Clear any redirect flags to prevent interference
+                sessionStorage.removeItem('redirecting');
+                sessionStorage.removeItem('redirectTimestamp');
+                // Redirect immediately
                 setTimeout(() => {
+                    doctorSignupForm.classList.remove('submitting');
                     window.location.href = 'dashboard.html';
-                }, 1000);
+                }, 500);
             } else {
                 showMessage('signup-message', `❌ ${result.message}`, 'error');
+                doctorSignupForm.classList.remove('submitting');
             }
         });
     }
@@ -398,42 +475,47 @@ document.addEventListener('DOMContentLoaded', function() {
     
     setTimeout(() => {
         try {
-            // Clear redirect flag if it's been stuck (safety measure)
-            const redirectFlag = sessionStorage.getItem('redirecting');
-            if (redirectFlag === 'true' && redirectCheckAttempts === 0) {
-                console.warn('Found stuck redirect flag, clearing it');
-                sessionStorage.removeItem('redirecting');
-                return; // Don't redirect if flag was stuck
+            // Only check if we're on index.html and user is logged in
+            // Don't interfere with active login/signup flows
+            const currentUrl = window.location.href.toLowerCase();
+            const currentFile = window.location.pathname.split('/').pop().toLowerCase() || '';
+            const isOnIndex = currentUrl.includes('index.html') || 
+                             currentFile === '' || 
+                             currentFile === 'index.html';
+            const isOnDashboard = currentUrl.includes('dashboard.html');
+            
+            // Only run redirect check if we're on index page and not already redirecting
+            if (!isOnIndex || isOnDashboard) {
+                return;
             }
             
-            // Only check if not already redirecting and haven't exceeded attempts
-            if (redirectFlag === 'true' || redirectCheckAttempts >= maxRedirectAttempts) {
-                console.log('Skipping redirect check - already redirecting or max attempts reached');
+            // Check if there's an active form submission (don't interfere)
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('patient-signup-form') || document.getElementById('doctor-signup-form');
+            if (loginForm && loginForm.classList.contains('submitting')) {
+                return; // Don't interfere with active login
+            }
+            if (signupForm && signupForm.classList.contains('submitting')) {
+                return; // Don't interfere with active signup
+            }
+            
+            const redirectFlag = sessionStorage.getItem('redirecting');
+            if (redirectFlag === 'true') {
+                // Already redirecting, don't interfere
                 return;
             }
             
             const currentUser = sessionStorage.getItem('currentUser');
             if (currentUser) {
-                const currentUrl = window.location.href.toLowerCase();
-                const currentFile = window.location.pathname.split('/').pop().toLowerCase() || '';
+                // User is logged in, redirect to dashboard
+                redirectCheckAttempts++;
+                console.log('User already logged in, redirecting to dashboard...');
+                sessionStorage.setItem('redirecting', 'true');
+                sessionStorage.setItem('redirectTimestamp', Date.now().toString());
                 
-                // Only redirect if on index.html, not on dashboard, and URL confirms we're on index
-                const isOnIndex = currentUrl.includes('index.html') || 
-                                 currentFile === '' || 
-                                 currentFile === 'index.html';
-                const isOnDashboard = currentUrl.includes('dashboard.html');
-                
-                if (isOnIndex && !isOnDashboard) {
-                    redirectCheckAttempts++;
-                    console.log('Redirecting to dashboard...');
-                    // Prevent redirect loops - set flag with timestamp
-                    sessionStorage.setItem('redirecting', 'true');
-                    sessionStorage.setItem('redirectTimestamp', Date.now().toString());
-                    
-                    setTimeout(() => {
-                        window.location.href = 'dashboard.html';
-                    }, 100);
-                }
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 100);
             } else {
                 // Clear redirect flags if no user is logged in
                 sessionStorage.removeItem('redirecting');
@@ -445,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sessionStorage.removeItem('redirecting');
             sessionStorage.removeItem('redirectTimestamp');
         }
-    }, 1000); // Longer delay to ensure everything is loaded
+    }, 1500); // Longer delay to ensure login/signup completes first
     
     // Safety timeout - clear redirect flag after 5 seconds if page is still here
     setTimeout(() => {
