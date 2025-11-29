@@ -861,7 +861,18 @@ function showConsultationModal() {
 
 function closeConsultationModal() {
     document.getElementById('consultation-modal').style.display = 'none';
+    
+    // Clear search input when closing modal
+    const searchInput = document.getElementById('doctor-search-input');
+    if (searchInput) {
+        searchInput.value = '';
+    }
 }
+
+// Global variables for doctor data
+let allDoctorsCache = [];
+let consultedDoctorsCache = new Set();
+let currentlyDisplayedDoctors = [];
 
 async function loadAvailableDoctors() {
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
@@ -893,36 +904,95 @@ async function loadAvailableDoctors() {
         // Fallback - use existing onlineDoctors set
     }
     
-    // Get all doctors
-    const allDoctors = Object.keys(users)
+    // Get all doctors and store in cache
+    allDoctorsCache = Object.keys(users)
         .filter(email => users[email].user_type === 'Doctor')
         .map(email => ({
             email,
-            ...users[email]
+            ...users[email],
+            doctorName: (users[email].user_data && users[email].user_data.name) 
+                ? users[email].user_data.name 
+                : (email.split('@')[0] || 'Unknown Doctor'),
+            specialization: (users[email].user_data && users[email].user_data.specialization) 
+                ? users[email].user_data.specialization 
+                : 'N/A',
+            experience: (users[email].user_data && users[email].user_data.experience) 
+                ? users[email].user_data.experience 
+                : 0
         }));
     
-    // Get doctors the patient has consulted with (accepted consultations)
-    const consultedDoctors = new Set();
+    // Get doctors the patient has consulted with (any consultation status)
+    consultedDoctorsCache = new Set();
     consultations.forEach(consultation => {
-        if (consultation.patientEmail === userData.email && consultation.status === 'accepted') {
-            consultedDoctors.add(consultation.doctorEmail);
+        if (consultation.patientEmail === userData.email) {
+            // Include all consultations, not just accepted ones
+            consultedDoctorsCache.add(consultation.doctorEmail);
         }
     });
     
-    // Filter doctors: only show ones patient has consulted with OR ones who are online
-    const availableDoctors = allDoctors.filter(doctor => {
-        const hasConsulted = consultedDoctors.has(doctor.email);
+    // Default: Show previously consulted doctors + online doctors
+    // Previously consulted doctors are ALWAYS shown (even if offline)
+    const consultedDoctorsList = allDoctorsCache.filter(doctor => 
+        consultedDoctorsCache.has(doctor.email)
+    );
+    
+    // Add online doctors who aren't already in consulted list
+    const onlineDoctorsList = allDoctorsCache.filter(doctor => {
         const isOnline = onlineDoctors.has(doctor.email);
-        return hasConsulted || isOnline;
+        const alreadyInList = consultedDoctorsCache.has(doctor.email);
+        return isOnline && !alreadyInList;
     });
     
+    currentlyDisplayedDoctors = [...consultedDoctorsList, ...onlineDoctorsList];
+    
+    // Clear search input
+    const searchInput = document.getElementById('doctor-search-input');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    renderDoctors(currentlyDisplayedDoctors);
+}
+
+// Filter doctors based on search query
+function filterDoctors(searchQuery) {
+    if (!searchQuery || searchQuery.trim() === '') {
+        // No search query - show default: consulted + online doctors
+        loadAvailableDoctors();
+        return;
+    }
+    
+    const query = searchQuery.toLowerCase().trim();
+    
+    // Search through ALL doctors (not just consulted/online)
+    const filtered = allDoctorsCache.filter(doctor => {
+        const name = doctor.doctorName.toLowerCase();
+        const specialization = doctor.specialization.toLowerCase();
+        const email = doctor.email.toLowerCase();
+        const experience = String(doctor.experience || 0);
+        
+        return name.includes(query) || 
+               specialization.includes(query) || 
+               email.includes(query) ||
+               experience.includes(query);
+    });
+    
+    currentlyDisplayedDoctors = filtered;
+    renderDoctors(filtered, true); // true indicates we're in search mode
+}
+
+// Render doctors list
+function renderDoctors(doctors, isSearchMode = false) {
     const doctorsContainer = document.getElementById('available-doctors');
     
-    if (availableDoctors.length === 0) {
+    if (!doctors || doctors.length === 0) {
+        const message = isSearchMode 
+            ? 'No doctors found matching your search. Try different keywords.'
+            : 'No doctors available at the moment. Use the search box to find doctors.';
         doctorsContainer.innerHTML = `
             <div class="consultation-section">
-                <h3>👨‍⚕️ Available Doctors</h3>
-                <p>No doctors available at the moment. You can only see doctors you've previously consulted with or doctors who are currently online.</p>
+                <h3>👨‍⚕️ ${isSearchMode ? 'Search Results' : 'Available Doctors'}</h3>
+                <p>${message}</p>
             </div>
         `;
         return;
@@ -930,24 +1000,29 @@ async function loadAvailableDoctors() {
     
     doctorsContainer.innerHTML = `
         <div class="consultation-section">
-            <h3>👨‍⚕️ Available Doctors</h3>
+            <h3>👨‍⚕️ ${isSearchMode ? 'Search Results' : 'Available Doctors'}</h3>
+            ${!isSearchMode ? '<p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">Previously consulted doctors are always shown. Use search to find other doctors.</p>' : ''}
             <div class="doctors-list">
-                ${availableDoctors.map(doctor => {
-                    const hasConsulted = consultedDoctors.has(doctor.email);
+                ${doctors.map(doctor => {
+                    const hasConsulted = consultedDoctorsCache.has(doctor.email);
                     const isOnline = onlineDoctors.has(doctor.email);
-                    const doctorName = (doctor.user_data && doctor.user_data.name) ? doctor.user_data.name : 'Unknown Doctor';
-                    const specialization = (doctor.user_data && doctor.user_data.specialization) ? doctor.user_data.specialization : 'N/A';
-                    const experience = (doctor.user_data && doctor.user_data.experience) ? doctor.user_data.experience : 0;
+                    const doctorName = doctor.doctorName;
+                    const specialization = doctor.specialization;
+                    const experience = doctor.experience;
+                    
                     return `
                         <div class="doctor-card">
                             <div class="doctor-card-header">
                                 <h4>Dr. ${doctorName}</h4>
-                                ${isOnline ? '<span class="online-badge">🟢 Online</span>' : ''}
-                                ${hasConsulted ? '<span class="consulted-badge">✓ Consulted</span>' : ''}
+                                ${isOnline ? '<span class="online-badge">🟢 Online</span>' : '<span class="offline-badge">⚫ Offline</span>'}
+                                ${hasConsulted ? '<span class="consulted-badge">✓ Previously Consulted</span>' : ''}
                             </div>
                             <p><strong>Specialization:</strong> ${specialization}</p>
                             <p><strong>Experience:</strong> ${experience} years</p>
-                            <button class="btn-primary" onclick="requestConsultation('${doctor.email}')">Request Consultation</button>
+                            <p><strong>Email:</strong> ${doctor.email}</p>
+                            <button class="btn-primary" onclick="requestConsultation('${doctor.email}')">
+                                ${hasConsulted ? 'Request Consultation Again' : 'Request Consultation'}
+                            </button>
                         </div>
                     `;
                 }).join('')}
@@ -1832,6 +1907,15 @@ async function startVideoCall(consultation) {
         if (cameraIcon) cameraIcon.textContent = '📹';
     }
     
+    // Reset remote stream
+    remoteStream = null;
+    
+    // Ensure remote video is not muted (for audio playback)
+    const remoteVideo = document.getElementById('remote-video');
+    if (remoteVideo) {
+        remoteVideo.muted = false;
+    }
+    
     // Initialize video streams with WebRTC
     initializeVideoStreams();
     
@@ -1958,23 +2042,65 @@ async function initializeVideoStreams() {
             }
         }
         
-        // Create peer connection
+        // Create peer connection if it doesn't exist
         if (!peerConnection) {
             createPeerConnection();
+        } else {
+            // If peer connection exists, just ensure tracks are added
+            console.log('ℹ️ Peer connection already exists, ensuring tracks are added');
         }
         
-        // Add local stream tracks to peer connection
-        if (peerConnection) {
+        // Add all local stream tracks to peer connection
+        if (peerConnection && localStream) {
+            console.log('📤 Adding local tracks to peer connection...');
+            
+            // Check existing senders to avoid duplicates
+            const existingSenders = peerConnection.getSenders();
+            const existingTrackIds = existingSenders
+                .map(s => s.track?.id)
+                .filter(Boolean);
+            
             localStream.getTracks().forEach(track => {
-                // Remove existing track if any
-                const senders = peerConnection.getSenders();
-                const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
-                if (existingSender) {
-                    peerConnection.removeTrack(existingSender);
+                // Skip if track already exists
+                if (existingTrackIds.includes(track.id)) {
+                    console.log(`  - ${track.kind} track (${track.id}) already in peer connection`);
+                    return;
                 }
-                // Add new track
-                peerConnection.addTrack(track, localStream);
+                
+                console.log(`  - Adding ${track.kind} track (${track.id})`);
+                try {
+                    peerConnection.addTrack(track, localStream);
+                } catch (err) {
+                    console.error(`Error adding ${track.kind} track:`, err);
+                    // If error is about duplicate track, try to replace existing one
+                    const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
+                    if (existingSender) {
+                        console.log(`  - Replacing existing ${track.kind} track`);
+                        existingSender.replaceTrack(track).catch(replaceErr => {
+                            console.error(`Error replacing ${track.kind} track:`, replaceErr);
+                        });
+                    }
+                }
             });
+            
+            // Verify tracks were added
+            const senders = peerConnection.getSenders();
+            console.log(`✅ Peer connection has ${senders.length} track sender(s)`);
+            senders.forEach(sender => {
+                if (sender.track) {
+                    console.log(`  - ${sender.track.kind} track (id: ${sender.track.id}, enabled: ${sender.track.enabled})`);
+                }
+            });
+            
+            // Ensure we have both audio and video tracks
+            const audioTracks = localStream.getAudioTracks();
+            const videoTracks = localStream.getVideoTracks();
+            if (audioTracks.length === 0) {
+                console.warn('⚠️ No audio tracks in local stream');
+            }
+            if (videoTracks.length === 0) {
+                console.warn('⚠️ No video tracks in local stream');
+            }
             
             // Start WebRTC connection
             await startWebRTCConnection();
@@ -1994,27 +2120,108 @@ async function initializeVideoStreams() {
 
 // Create RTCPeerConnection
 function createPeerConnection() {
+    // Don't create if already exists and is in good state
+    if (peerConnection && (peerConnection.connectionState === 'new' || peerConnection.connectionState === 'connecting')) {
+        console.log('ℹ️ Peer connection already exists in good state, reusing');
+        return;
+    }
+    
+    // Close existing peer connection if any and in bad state
+    if (peerConnection) {
+        console.log('⚠️ Closing existing peer connection before creating new one');
+        try {
+            peerConnection.close();
+        } catch (e) {
+            console.error('Error closing peer connection:', e);
+        }
+        peerConnection = null;
+    }
+    
     peerConnection = new RTCPeerConnection(pcConfig);
     
-    // Handle remote stream
+    // Handle remote stream - can receive multiple tracks (audio + video)
     peerConnection.ontrack = (event) => {
-        console.log('📹 Received remote track');
-        remoteStream = event.streams[0];
+        console.log('📹 Received remote track:', event.track.kind, 'Streams:', event.streams.length);
         
-        // Display remote video
+        // Initialize remote stream if it doesn't exist
+        if (!remoteStream) {
+            remoteStream = new MediaStream();
+        }
+        
+        // Add the received track to our remote stream
+        const track = event.track;
+        const existingTrack = remoteStream.getTracks().find(
+            t => t.kind === track.kind && t.id === track.id
+        );
+        
+        if (!existingTrack) {
+            console.log(`✅ Adding remote ${track.kind} track to stream`);
+            remoteStream.addTrack(track);
+            
+            // Log track state
+            track.onended = () => {
+                console.log(`❌ Remote ${track.kind} track ended`);
+            };
+            
+            track.onmute = () => {
+                console.log(`🔇 Remote ${track.kind} track muted`);
+            };
+            
+            track.onunmute = () => {
+                console.log(`🔊 Remote ${track.kind} track unmuted`);
+            };
+        } else {
+            console.log(`⚠️ Remote ${track.kind} track already exists`);
+        }
+        
+        // Update remote video element with the merged stream
         const remoteVideo = document.getElementById('remote-video');
-        if (remoteVideo) {
+        if (remoteVideo && remoteStream) {
+            // Always update srcObject to ensure we have the latest stream with all tracks
             remoteVideo.srcObject = remoteStream;
-            remoteVideo.play().catch(err => console.log('Remote video play error:', err));
             
-            // Hide placeholder
-            const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
-            if (remoteVideoPlaceholder) remoteVideoPlaceholder.style.display = 'none';
+            // CRITICAL: Remote video must NOT be muted to hear audio
+            remoteVideo.muted = false;
             
-            // Mark as active
-            const remoteVideoBox = document.getElementById('remote-video-box');
-            if (remoteVideoBox) {
-                remoteVideoBox.setAttribute('data-video-active', 'true');
+            // Ensure volume is set (may be needed for some browsers)
+            remoteVideo.volume = 1.0;
+            
+            // Force play with audio enabled
+            remoteVideo.play().then(() => {
+                console.log('✅ Remote video playing with audio');
+            }).catch(err => {
+                console.error('Remote video play error:', err);
+                // Try again after a short delay
+                setTimeout(() => {
+                    remoteVideo.play().catch(e => console.error('Retry play failed:', e));
+                }, 500);
+            });
+            
+            // Hide placeholder when we have video track
+            if (track.kind === 'video') {
+                const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
+                if (remoteVideoPlaceholder) remoteVideoPlaceholder.style.display = 'none';
+                
+                const remoteVideoBox = document.getElementById('remote-video-box');
+                if (remoteVideoBox) {
+                    remoteVideoBox.setAttribute('data-video-active', 'true');
+                }
+            }
+            
+            // Log all tracks in the stream
+            const trackKinds = remoteStream.getTracks().map(t => `${t.kind}(${t.enabled ? 'on' : 'off'})`);
+            console.log('✅ Remote stream updated. Active tracks:', trackKinds.join(', '));
+            
+            // Verify audio track exists
+            const audioTracks = remoteStream.getAudioTracks();
+            const videoTracks = remoteStream.getVideoTracks();
+            if (audioTracks.length > 0) {
+                console.log('🔊 Remote audio track is present:', audioTracks.map(t => `id:${t.id}, enabled:${t.enabled}`).join(', '));
+            } else {
+                console.warn('⚠️ No audio track in remote stream yet');
+            }
+            if (videoTracks.length > 0) {
+                console.log('📹 Remote video track is present:', videoTracks.map(t => `id:${t.id}, enabled:${t.enabled}`).join(', '));
             }
         }
     };
@@ -2433,6 +2640,7 @@ function cleanupWebRTC() {
             localVideo.srcObject.getTracks().forEach(track => track.stop());
         }
         localVideo.srcObject = null;
+        localVideo.muted = true; // Reset to muted for local video
     }
     
     const remoteVideo = document.getElementById('remote-video');
@@ -2441,6 +2649,7 @@ function cleanupWebRTC() {
             remoteVideo.srcObject.getTracks().forEach(track => track.stop());
         }
         remoteVideo.srcObject = null;
+        remoteVideo.muted = false; // Ensure remote video is not muted for audio
     }
     
     // Reset placeholders

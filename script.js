@@ -80,47 +80,59 @@ async function localRegisterUser(email, password, userType, userData) {
     }
 }
 
-// Login user (local storage)
+// Login user (checks local storage first, then server for cross-device login)
 async function localLoginUser(email, password) {
     try {
+        const hashedPassword = await hashPassword(password);
         const users = getUsersDB();
         
-        if (!users[email]) {
-            return { success: false, message: 'Email not found. Please register first.' };
+        // First, check local storage
+        if (users[email]) {
+            const storedPassword = users[email].password;
+            
+            if (storedPassword && storedPassword.length > 0) {
+                if (storedPassword === hashedPassword) {
+                    // Local login successful
+                    sessionStorage.setItem('currentUser', JSON.stringify({
+                        email: email,
+                        user_type: users[email].user_type,
+                        user_data: users[email].user_data
+                    }));
+                    return { success: true, message: 'Login successful!' };
+                } else {
+                    // Password doesn't match locally - try server
+                    console.log('Password mismatch locally, trying server login...');
+                }
+            }
         }
         
-        const hashedPassword = await hashPassword(password);
-        const storedPassword = users[email].password;
+        // User not found locally or password mismatch - try server login (cross-device)
+        console.log('User not found locally, attempting server login for cross-device access...');
         
-        // Debug logging (remove in production)
-        console.log('Login attempt:', {
-            email: email,
-            passwordLength: password.length,
-            storedPasswordLength: storedPassword ? storedPassword.length : 0,
-            storedPasswordExists: !!storedPassword,
-            hashedPasswordLength: hashedPassword.length,
-            passwordsMatch: storedPassword === hashedPassword,
-            storedPasswordPreview: storedPassword ? storedPassword.substring(0, 10) + '...' : 'null'
-        });
-        
-        if (!storedPassword || storedPassword.length === 0) {
-            console.error('No password stored for user:', email);
-            return { success: false, message: 'No password found. Please register again.' };
+        // Check if loginUserOnServer function is available (from api-client.js)
+        if (typeof loginUserOnServer === 'function') {
+            const serverResult = await loginUserOnServer(email, hashedPassword);
+            
+            if (serverResult && serverResult.success && serverResult.user) {
+                // Server login successful - user downloaded to local storage
+                sessionStorage.setItem('currentUser', JSON.stringify({
+                    email: email,
+                    user_type: serverResult.user.user_type,
+                    user_data: serverResult.user.user_data
+                }));
+                return { success: true, message: 'Login successful!' };
+            } else {
+                // Server login failed
+                return serverResult || { success: false, message: 'Email not found. Please register first.' };
+            }
+        } else {
+            // loginUserOnServer not available (api-client.js not loaded)
+            if (!users[email]) {
+                return { success: false, message: 'Email not found. Please register first.' };
+            } else {
+                return { success: false, message: 'Incorrect password. Please try again.' };
+            }
         }
-        
-        if (storedPassword !== hashedPassword) {
-            console.error('Password mismatch! Stored:', storedPassword.substring(0, 20), '... Calculated:', hashedPassword.substring(0, 20), '...');
-            return { success: false, message: 'Incorrect password. Please try again.' };
-        }
-        
-        // Store current user in sessionStorage (tab-specific, so each tab can have different user)
-        sessionStorage.setItem('currentUser', JSON.stringify({
-            email: email,
-            user_type: users[email].user_type,
-            user_data: users[email].user_data
-        }));
-        
-        return { success: true, message: 'Login successful!' };
     } catch (error) {
         console.error('Error in localLoginUser:', error);
         return { success: false, message: 'An error occurred during login. Please try again.' };
@@ -349,10 +361,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Also register on server for global availability (no password)
+                // Also register on server for global availability (with password hash for cross-device login)
                 // This is optional - if server is not available, continue with local storage only
                 try {
-                    await registerUserOnServer(email, userData, 'Patient');
+                    const hashedPassword = await hashPassword(password);
+                    await registerUserOnServer(email, userData, 'Patient', hashedPassword);
                 } catch (e) {
                     // Silently fail - local storage is sufficient for login
                     console.log('Server registration failed (using local storage only):', e.message);
@@ -448,10 +461,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Also register on server for global availability (no password)
+                // Also register on server for global availability (with password hash for cross-device login)
                 // This is optional - if server is not available, continue with local storage only
                 try {
-                    await registerUserOnServer(email, userData, 'Doctor');
+                    const hashedPassword = await hashPassword(password);
+                    await registerUserOnServer(email, userData, 'Doctor', hashedPassword);
                 } catch (e) {
                     // Silently fail - local storage is sufficient for login
                     console.log('Server registration failed (using local storage only):', e.message);

@@ -52,19 +52,47 @@ app.get('/api/users', (req, res) => {
 
 // Register/Update user
 app.post('/api/users/register', (req, res) => {
-    const { email, userData, userType } = req.body;
+    const { email, userData, userType, passwordHash } = req.body;
     if (!email || !userData || !userType) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
+    
+    // Get existing user to preserve password if updating
+    const existing = usersDB[email];
     
     usersDB[email] = {
         email,
         user_data: userData,
         user_type: userType,
-        registered_date: new Date().toISOString()
+        password_hash: passwordHash || existing?.password_hash, // Store hashed password for cross-device login
+        registered_date: existing?.registered_date || new Date().toISOString()
     };
     
     res.json({ success: true, user: usersDB[email] });
+});
+
+// Login endpoint (for cross-device login)
+app.post('/api/users/login', (req, res) => {
+    const { email, passwordHash } = req.body;
+    
+    if (!email || !passwordHash) {
+        return res.status(400).json({ error: 'Email and password hash are required' });
+    }
+    
+    const user = usersDB[email];
+    
+    if (!user) {
+        return res.status(404).json({ error: 'Email not found. Please register first.' });
+    }
+    
+    // Verify password hash matches
+    if (!user.password_hash || user.password_hash !== passwordHash) {
+        return res.status(401).json({ error: 'Incorrect password.' });
+    }
+    
+    // Return user data (without password hash for security)
+    const { password_hash, ...userWithoutPassword } = user;
+    res.json({ success: true, user: userWithoutPassword });
 });
 
 // Get consultations
@@ -346,47 +374,173 @@ io.on('connection', (socket) => {
     
     // Handle WebRTC offer - relay to the other party
     socket.on('webrtcOffer', ({ callId, consultationId, offer }) => {
-        console.log('📥 WebRTC offer received:', { callId, consultationId });
+        console.log('📥 WebRTC offer received:', { callId, consultationId, fromSocket: socket.id });
         
-        // Find all sockets in this call and relay to others
         const targetConsultationId = consultationId || callId;
         
-        // Relay to all other connected clients in this call
-        socket.broadcast.emit('webrtcOffer', {
-            callId: callId,
-            consultationId: targetConsultationId,
-            offer: offer
-        });
+        // Find the other participant in this call
+        const call = activeCalls[callId] || Object.values(activeCalls).find(c => 
+            c.consultationId === parseInt(targetConsultationId) || 
+            c.consultationId === targetConsultationId
+        );
+        
+        if (call) {
+            // Find consultation to get participant emails
+            const consultation = consultations.find(c => 
+                c.id === parseInt(targetConsultationId) || 
+                c.id === targetConsultationId
+            );
+            
+            if (consultation) {
+                // Find the other party's socket
+                const senderEmail = socket.email;
+                const otherEmail = senderEmail === consultation.doctorEmail 
+                    ? consultation.patientEmail 
+                    : consultation.doctorEmail;
+                const otherSocketId = onlineUsers.get(otherEmail);
+                
+                if (otherSocketId) {
+                    // Send directly to the other party
+                    io.to(otherSocketId).emit('webrtcOffer', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        offer: offer
+                    });
+                    console.log(`📤 Relay offer to ${otherEmail} (${otherSocketId})`);
+                } else {
+                    // Fallback to broadcast if other party not found
+                    console.log(`⚠️ Other party ${otherEmail} not online, broadcasting to all`);
+                    socket.broadcast.emit('webrtcOffer', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        offer: offer
+                    });
+                }
+            } else {
+                // Fallback: broadcast to all
+                socket.broadcast.emit('webrtcOffer', {
+                    callId: callId,
+                    consultationId: targetConsultationId,
+                    offer: offer
+                });
+            }
+        } else {
+            // Fallback: broadcast to all
+            socket.broadcast.emit('webrtcOffer', {
+                callId: callId,
+                consultationId: targetConsultationId,
+                offer: offer
+            });
+        }
     });
     
     // Handle WebRTC answer - relay to the other party
     socket.on('webrtcAnswer', ({ callId, consultationId, answer }) => {
-        console.log('📥 WebRTC answer received:', { callId, consultationId });
+        console.log('📥 WebRTC answer received:', { callId, consultationId, fromSocket: socket.id });
         
-        // Find all sockets in this call and relay to others
         const targetConsultationId = consultationId || callId;
         
-        // Relay to all other connected clients in this call
-        socket.broadcast.emit('webrtcAnswer', {
-            callId: callId,
-            consultationId: targetConsultationId,
-            answer: answer
-        });
+        // Find the other participant in this call
+        const call = activeCalls[callId] || Object.values(activeCalls).find(c => 
+            c.consultationId === parseInt(targetConsultationId) || 
+            c.consultationId === targetConsultationId
+        );
+        
+        if (call) {
+            const consultation = consultations.find(c => 
+                c.id === parseInt(targetConsultationId) || 
+                c.id === targetConsultationId
+            );
+            
+            if (consultation) {
+                const senderEmail = socket.email;
+                const otherEmail = senderEmail === consultation.doctorEmail 
+                    ? consultation.patientEmail 
+                    : consultation.doctorEmail;
+                const otherSocketId = onlineUsers.get(otherEmail);
+                
+                if (otherSocketId) {
+                    io.to(otherSocketId).emit('webrtcAnswer', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        answer: answer
+                    });
+                    console.log(`📤 Relay answer to ${otherEmail} (${otherSocketId})`);
+                } else {
+                    socket.broadcast.emit('webrtcAnswer', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        answer: answer
+                    });
+                }
+            } else {
+                socket.broadcast.emit('webrtcAnswer', {
+                    callId: callId,
+                    consultationId: targetConsultationId,
+                    answer: answer
+                });
+            }
+        } else {
+            socket.broadcast.emit('webrtcAnswer', {
+                callId: callId,
+                consultationId: targetConsultationId,
+                answer: answer
+            });
+        }
     });
     
     // Handle ICE candidate - relay to the other party
     socket.on('iceCandidate', ({ callId, consultationId, candidate }) => {
-        console.log('🧊 ICE candidate received:', { callId, consultationId });
+        console.log('🧊 ICE candidate received:', { callId, consultationId, fromSocket: socket.id });
         
-        // Find all sockets in this call and relay to others
         const targetConsultationId = consultationId || callId;
         
-        // Relay to all other connected clients in this call
-        socket.broadcast.emit('iceCandidate', {
-            callId: callId,
-            consultationId: targetConsultationId,
-            candidate: candidate
-        });
+        // Find the other participant in this call
+        const call = activeCalls[callId] || Object.values(activeCalls).find(c => 
+            c.consultationId === parseInt(targetConsultationId) || 
+            c.consultationId === targetConsultationId
+        );
+        
+        if (call) {
+            const consultation = consultations.find(c => 
+                c.id === parseInt(targetConsultationId) || 
+                c.id === targetConsultationId
+            );
+            
+            if (consultation) {
+                const senderEmail = socket.email;
+                const otherEmail = senderEmail === consultation.doctorEmail 
+                    ? consultation.patientEmail 
+                    : consultation.doctorEmail;
+                const otherSocketId = onlineUsers.get(otherEmail);
+                
+                if (otherSocketId) {
+                    io.to(otherSocketId).emit('iceCandidate', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        candidate: candidate
+                    });
+                } else {
+                    socket.broadcast.emit('iceCandidate', {
+                        callId: callId,
+                        consultationId: targetConsultationId,
+                        candidate: candidate
+                    });
+                }
+            } else {
+                socket.broadcast.emit('iceCandidate', {
+                    callId: callId,
+                    consultationId: targetConsultationId,
+                    candidate: candidate
+                });
+            }
+        } else {
+            socket.broadcast.emit('iceCandidate', {
+                callId: callId,
+                consultationId: targetConsultationId,
+                candidate: candidate
+            });
+        }
     });
 });
 

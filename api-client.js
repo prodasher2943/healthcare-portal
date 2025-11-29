@@ -254,6 +254,19 @@ function initSocket() {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
                 console.log('✅ Remote description set');
                 
+                // Add any pending ICE candidates that arrived before remote description
+                if (peerConnection.pendingIceCandidates && peerConnection.pendingIceCandidates.length > 0) {
+                    console.log(`📥 Adding ${peerConnection.pendingIceCandidates.length} pending ICE candidates`);
+                    for (const candidate of peerConnection.pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(candidate);
+                        } catch (err) {
+                            console.error('Error adding pending ICE candidate:', err);
+                        }
+                    }
+                    peerConnection.pendingIceCandidates = [];
+                }
+                
                 // Create answer
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
@@ -287,6 +300,19 @@ function initSocket() {
             try {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
                 console.log('✅ Remote description set (answer)');
+                
+                // Add any pending ICE candidates that arrived before remote description
+                if (peerConnection.pendingIceCandidates && peerConnection.pendingIceCandidates.length > 0) {
+                    console.log(`📥 Adding ${peerConnection.pendingIceCandidates.length} pending ICE candidates`);
+                    for (const candidate of peerConnection.pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(candidate);
+                        } catch (err) {
+                            console.error('Error adding pending ICE candidate:', err);
+                        }
+                    }
+                    peerConnection.pendingIceCandidates = [];
+                }
             } catch (error) {
                 console.error('Error handling WebRTC answer:', error);
             }
@@ -304,10 +330,27 @@ function initSocket() {
         
         if (isOurCall && typeof peerConnection !== 'undefined' && peerConnection) {
             try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                console.log('✅ ICE candidate added');
+                // Check if remote description is set before adding ICE candidate
+                if (peerConnection.remoteDescription) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log('✅ ICE candidate added');
+                } else {
+                    // Store candidate to add later when remote description is set
+                    console.log('⏳ Storing ICE candidate until remote description is set');
+                    if (!peerConnection.pendingIceCandidates) {
+                        peerConnection.pendingIceCandidates = [];
+                    }
+                    peerConnection.pendingIceCandidates.push(new RTCIceCandidate(candidate));
+                }
             } catch (error) {
                 console.error('Error adding ICE candidate:', error);
+                // If error is about invalid state, try to queue it
+                if (error.message && error.message.includes('remoteDescription')) {
+                    if (!peerConnection.pendingIceCandidates) {
+                        peerConnection.pendingIceCandidates = [];
+                    }
+                    peerConnection.pendingIceCandidates.push(new RTCIceCandidate(candidate));
+                }
             }
         }
     });
@@ -328,7 +371,21 @@ async function apiRequest(endpoint, options = {}) {
         });
         
         if (!response.ok) {
-            throw new Error(`API Error: ${response.status}`);
+            // Try to get error message from response
+            let errorMessage = `API Error: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData.error) {
+                    errorMessage = errorData.error;
+                }
+            } catch (e) {
+                // Response is not JSON, use status text
+                errorMessage = response.statusText || errorMessage;
+            }
+            
+            const error = new Error(errorMessage);
+            error.status = response.status;
+            throw error;
         }
         
         return await response.json();
@@ -348,16 +405,16 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // User Management (server-side)
-// Register/update user profile on the server (no password here - password is handled locally)
-async function registerUserOnServer(email, userData, userType) {
+// Register/update user profile on the server (includes password hash for cross-device login)
+async function registerUserOnServer(email, userData, userType, passwordHash) {
     try {
         const result = await apiRequest('/users/register', {
             method: 'POST',
-            body: JSON.stringify({ email, userData, userType })
+            body: JSON.stringify({ email, userData, userType, passwordHash })
         });
         
         // Also save to localStorage as backup
-        // IMPORTANT: Preserve the password from local storage - server doesn't have it!
+        // IMPORTANT: Preserve the password from local storage
         const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
         if (result && result.user) {
             // Preserve the password and other local-only fields
@@ -376,6 +433,58 @@ async function registerUserOnServer(email, userData, userType) {
         // Don't throw error, just return null to indicate server registration failed
         console.log('Server registration unavailable, using local storage only');
         return null;
+    }
+}
+
+// Login on server (for cross-device login)
+async function loginUserOnServer(email, passwordHash) {
+    try {
+        const result = await apiRequest('/users/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, passwordHash })
+        });
+        
+        if (result && result.success && result.user) {
+            // Store user in localStorage for future logins
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+            const existingUser = usersDB[email] || {};
+            
+            usersDB[email] = {
+                ...result.user,
+                password: existingUser.password || passwordHash, // Use existing password or current hash
+                registered_date: existingUser.registered_date || result.user.registered_date
+            };
+            
+            localStorage.setItem('usersDB', JSON.stringify(usersDB));
+            return { success: true, user: usersDB[email] };
+        }
+        
+        return { success: false, message: 'Login failed' };
+    } catch (error) {
+        console.error('Failed to login on server:', error);
+        
+        // Handle server unavailable
+        if (error.message === 'SERVER_UNAVAILABLE') {
+            return { success: false, message: 'Server unavailable. Please check your connection.' };
+        }
+        
+        // Check for specific HTTP error codes
+        if (error.status === 404 || (error.message && error.message.includes('404'))) {
+            return { success: false, message: 'Email not found. Please register first.' };
+        }
+        if (error.status === 401 || (error.message && error.message.includes('401'))) {
+            return { success: false, message: 'Incorrect password. Please try again.' };
+        }
+        if (error.status === 400 || (error.message && error.message.includes('400'))) {
+            return { success: false, message: error.message || 'Invalid request. Please try again.' };
+        }
+        
+        // Use error message if available
+        if (error.message && !error.message.includes('API Error')) {
+            return { success: false, message: error.message };
+        }
+        
+        return { success: false, message: 'Login failed. Please try again.' };
     }
 }
 

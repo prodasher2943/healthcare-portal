@@ -190,6 +190,28 @@
             <h2>📞 Request Consultation</h2>
             <div id="consultation-summary-display"></div>
             <div id="patient-info-display"></div>
+            
+            <!-- Doctor Search Box -->
+            <div class="doctor-search-container" style="margin: 1.5rem 0;">
+                <div class="form-group">
+                    <label for="doctor-search-input" style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333;">
+                        🔍 Search Doctors
+                    </label>
+                    <input 
+                        type="text" 
+                        id="doctor-search-input" 
+                        placeholder="Search by name, specialization, or experience..."
+                        oninput="filterDoctors(this.value)"
+                        style="width: 100%; padding: 0.75rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; transition: border-color 0.3s;"
+                        onfocus="this.style.borderColor='#667eea'; this.style.outline='none';"
+                        onblur="this.style.borderColor='#e0e0e0';"
+                    />
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                        💡 Tip: Search for any doctor to request a consultation, even if you haven't consulted them before
+                    </p>
+                </div>
+            </div>
+            
             <div id="available-doctors"></div>
         </div>
     </div>
