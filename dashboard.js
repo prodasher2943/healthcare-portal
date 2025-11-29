@@ -1655,7 +1655,19 @@ async function startVideoCall(consultation) {
     document.getElementById('video-call-screen').style.display = 'flex';
     
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
-    const users = await getAllUsers();
+    
+    // Get users from server with fallback to localStorage
+    let users = {};
+    try {
+        users = await getAllUsers();
+        // Also merge with localStorage for better fallback
+        const localUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        users = { ...localUsers, ...users };
+    } catch (error) {
+        console.log('Error fetching users, using localStorage:', error);
+        users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    }
+    
     const isDoctor = userData && (userData.user_type === 'Doctor' || userData.user_type?.toLowerCase() === 'doctor');
     
     // Set up participant info in header
@@ -1665,11 +1677,58 @@ async function startVideoCall(consultation) {
         document.getElementById('remote-video-label').textContent = consultation.patientName || 'Patient';
         document.getElementById('remote-video-name-label').textContent = consultation.patientName || 'Patient';
     } else {
-        const doctor = users[consultation.doctorEmail];
-        const doctorName = (doctor && doctor.user_data && doctor.user_data.name) ? doctor.user_data.name : 'Unknown Doctor';
+        // Fetch doctor info more reliably - try multiple sources
+        const doctorEmail = consultation.doctorEmail;
+        let doctor = users[doctorEmail];
+        
+        // Try to get from server if not found or incomplete
+        if (!doctor || !doctor.user_data || !doctor.user_data.name) {
+            console.log('Fetching doctor info from server...', doctorEmail);
+            try {
+                // Fetch all users from server
+                const serverUsers = await getAllUsers();
+                if (serverUsers && serverUsers[doctorEmail]) {
+                    doctor = serverUsers[doctorEmail];
+                    // Update local users cache
+                    users[doctorEmail] = doctor;
+                }
+                
+                // Also check localStorage as additional fallback
+                if ((!doctor || !doctor.user_data || !doctor.user_data.name) && typeof localStorage !== 'undefined') {
+                    const localUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+                    if (localUsers[doctorEmail]) {
+                        doctor = localUsers[doctorEmail];
+                    }
+                }
+            } catch (err) {
+                console.log('Error fetching doctor info:', err);
+            }
+        }
+        
+        // Try multiple ways to get doctor name
+        let doctorName = null;
+        if (doctor && doctor.user_data) {
+            doctorName = doctor.user_data.name;
+        }
+        
+        // If still no name, try email-based fallback
+        if (!doctorName && doctorEmail) {
+            const emailParts = doctorEmail.split('@')[0].split(/[._-]/);
+            doctorName = emailParts.map(part => 
+                part.charAt(0).toUpperCase() + part.slice(1)
+            ).join(' ');
+        }
+        
+        // Final fallback
+        if (!doctorName) {
+            doctorName = 'Doctor';
+        }
+        
         participantNameEl.textContent = `Dr. ${doctorName}`;
-        document.getElementById('remote-video-label').textContent = `Dr. ${doctorName}`;
-        document.getElementById('remote-video-name-label').textContent = `Dr. ${doctorName}`;
+        const remoteLabel = document.getElementById('remote-video-label');
+        const remoteNameLabel = document.getElementById('remote-video-name-label');
+        if (remoteLabel) remoteLabel.textContent = `Dr. ${doctorName}`;
+        if (remoteNameLabel) remoteNameLabel.textContent = `Dr. ${doctorName}`;
     }
     
     // Set up participant details panel
@@ -1688,24 +1747,62 @@ async function startVideoCall(consultation) {
             </div>
         `;
     } else {
-        const doctor = users[consultation.doctorEmail];
+        // Fetch doctor info more reliably
+        const doctorEmail = consultation.doctorEmail;
+        let doctor = users[doctorEmail];
+        
+        // If doctor not found, try to fetch again
+        if (!doctor || !doctor.user_data || !doctor.user_data.name) {
+            try {
+                const allUsersAgain = await getAllUsers();
+                doctor = allUsersAgain[doctorEmail] || users[doctorEmail];
+                // Update users object
+                if (doctor) users[doctorEmail] = doctor;
+            } catch (err) {
+                console.log('Error fetching doctor info:', err);
+            }
+        }
+        
         callInfoTitleEl.textContent = '👨‍⚕️ Doctor Information';
+        
+        // Get doctor info with multiple fallbacks
+        let doctorInfo = null;
         if (doctor && doctor.user_data) {
-            const doctorName = doctor.user_data.name || 'Unknown Doctor';
-            const specialization = doctor.user_data.specialization || 'N/A';
-            const contact = doctor.user_data.contact || 'N/A';
-            const experience = doctor.user_data.experience || 0;
-            const bio = doctor.user_data.bio || 'N/A';
-            
+            doctorInfo = {
+                name: doctor.user_data.name,
+                specialization: doctor.user_data.specialization,
+                contact: doctor.user_data.contact,
+                experience: doctor.user_data.experience,
+                bio: doctor.user_data.bio
+            };
+        }
+        
+        // If doctor info found, display it
+        if (doctorInfo && doctorInfo.name) {
             participantDetailsEl.innerHTML = `
-                <p><strong>Name:</strong> Dr. ${doctorName}</p>
-                <p><strong>Specialization:</strong> ${specialization}</p>
-                <p><strong>Contact:</strong> ${contact}</p>
-                <p><strong>Experience:</strong> ${experience} years</p>
-                <p><strong>Bio:</strong> ${bio}</p>
+                <p><strong>Name:</strong> Dr. ${doctorInfo.name}</p>
+                <p><strong>Specialization:</strong> ${doctorInfo.specialization || 'N/A'}</p>
+                <p><strong>Contact:</strong> ${doctorInfo.contact || 'N/A'}</p>
+                <p><strong>Experience:</strong> ${doctorInfo.experience || 0} years</p>
+                <p><strong>Bio:</strong> ${doctorInfo.bio || 'N/A'}</p>
             `;
         } else {
-            participantDetailsEl.innerHTML = `<p>Doctor information not available.</p>`;
+            // Fallback display with at least email
+            let displayName = 'Doctor';
+            if (doctorEmail) {
+                const emailParts = doctorEmail.split('@')[0].split(/[._-]/);
+                displayName = emailParts.map(part => 
+                    part.charAt(0).toUpperCase() + part.slice(1)
+                ).join(' ');
+            }
+            
+            participantDetailsEl.innerHTML = `
+                <p><strong>Name:</strong> Dr. ${displayName}</p>
+                <p><strong>Email:</strong> ${doctorEmail || 'N/A'}</p>
+                <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 0.5rem;">
+                    Loading additional information...
+                </p>
+            `;
         }
     }
     
@@ -1856,18 +1953,26 @@ const pcConfig = {
 // Initialize video streams with WebRTC
 async function initializeVideoStreams() {
     try {
-        // Request user media
-        localStream = await navigator.mediaDevices.getUserMedia({ 
+        // Request user media with initial camera
+        const initialConstraints = {
             video: { 
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
-                facingMode: 'user'
-            }, 
+                facingMode: 'user' // Start with front camera
+            },
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true
             }
-        });
+        };
+        
+        localStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
+        
+        // After getting stream, enumerate devices to get proper labels
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        availableCameras = devices.filter(device => device.kind === 'videoinput');
+        
+        console.log(`Found ${availableCameras.length} camera(s) available`);
         
         // Display local video
         const localVideo = document.getElementById('local-video');
@@ -2228,6 +2333,89 @@ function toggleCamera() {
     }
     
     console.log(`Camera ${isVideoOff ? 'turned off' : 'turned on'}`);
+}
+
+// Camera switching function
+let currentCameraIndex = 0;
+let availableCameras = [];
+
+async function switchCamera() {
+    if (!localStream) {
+        console.log('No local stream available');
+        return;
+    }
+    
+    try {
+        // Get available video devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        availableCameras = devices.filter(device => device.kind === 'videoinput');
+        
+        if (availableCameras.length < 2) {
+            alert('Only one camera is available. Cannot switch cameras.');
+            return;
+        }
+        
+        // Get current video track
+        const videoTracks = localStream.getVideoTracks();
+        if (videoTracks.length === 0) {
+            console.log('No video tracks available');
+            return;
+        }
+        
+        // Get current track's deviceId
+        const currentDeviceId = videoTracks[0].getSettings().deviceId;
+        const currentIndex = availableCameras.findIndex(cam => cam.deviceId === currentDeviceId);
+        
+        // Switch to next camera
+        currentCameraIndex = (currentIndex + 1) % availableCameras.length;
+        const nextCamera = availableCameras[currentCameraIndex];
+        
+        // Stop current video track
+        const oldVideoTrack = videoTracks[0];
+        oldVideoTrack.stop();
+        
+        // Get new stream with switched camera
+        const newStream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                deviceId: { exact: nextCamera.deviceId }
+            },
+            audio: false // Keep audio from existing stream
+        });
+        
+        // Get new video track
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        
+        // Replace track in stream
+        localStream.removeTrack(oldVideoTrack);
+        localStream.addTrack(newVideoTrack);
+        
+        // Replace track in peer connection
+        if (peerConnection) {
+            const sender = peerConnection.getSenders().find(s => 
+                s.track && s.track.kind === 'video'
+            );
+            if (sender) {
+                await sender.replaceTrack(newVideoTrack);
+                console.log('✅ Video track replaced in peer connection');
+            }
+        }
+        
+        // Update local video element
+        const localVideo = document.getElementById('local-video');
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+        }
+        
+        // Stop the temporary stream (we only needed the track)
+        newStream.getAudioTracks().forEach(track => track.stop());
+        
+        console.log(`✅ Switched to camera: ${nextCamera.label || 'Camera ' + (currentCameraIndex + 1)}`);
+    } catch (error) {
+        console.error('Error switching camera:', error);
+        alert('Unable to switch camera. Please check if you have multiple cameras available.');
+    }
 }
 
 // Cleanup WebRTC connections

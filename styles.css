@@ -1499,10 +1499,9 @@ body {
 .video-box-container {
     width: 100%;
     height: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
     position: relative;
+    display: block;
+    overflow: hidden;
 }
 
 .video-box {
@@ -1514,20 +1513,22 @@ body {
 }
 
 .remote-video {
-    flex: 1;
     width: 100%;
-    min-height: 400px;
+    height: 100%;
     position: relative;
+    min-height: 500px;
 }
 
 .local-video {
-    width: 300px;
-    height: 225px;
+    width: 280px;
+    height: 210px;
     position: absolute;
-    bottom: 1rem;
+    bottom: 5.5rem;
     right: 1rem;
     z-index: 10;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    pointer-events: none; /* Prevent blocking clicks on controls */
 }
 
 .video-box video {
@@ -1603,33 +1604,30 @@ body {
 /* Video Call Controls */
 .video-call-controls {
     position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 1.5rem;
+    right: 1.5rem;
     display: flex;
-    gap: 1rem;
-    z-index: 20;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 1rem 2rem;
-    border-radius: 50px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    flex-direction: column;
+    gap: 0.75rem;
+    z-index: 25;
 }
 
 .control-btn {
-    width: 60px;
-    height: 60px;
+    width: 55px;
+    height: 55px;
     border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.8);
     color: white;
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
     backdrop-filter: blur(10px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    pointer-events: auto; /* Ensure controls are clickable */
 }
 
 .control-btn:hover {
@@ -1850,6 +1848,18 @@ body {
 }
 
 /* Responsive video call interface */
+@media (max-width: 1024px) {
+    .video-call-sidebar {
+        width: 300px;
+    }
+    
+    .local-video {
+        width: 240px;
+        height: 180px;
+        bottom: 5rem;
+    }
+}
+
 @media (max-width: 768px) {
     .video-call-main {
         flex-direction: column;
@@ -1858,17 +1868,23 @@ body {
     .video-call-sidebar {
         width: 100%;
         max-height: 40vh;
+        order: 2;
     }
     
-    .local-video {
-        width: 200px;
-        height: 150px;
-        bottom: 0.5rem;
-        right: 0.5rem;
+    .video-container-wrapper {
+        order: 1;
+        min-height: 60vh;
     }
     
     .remote-video {
-        min-height: 300px;
+        min-height: 400px;
+    }
+    
+    .local-video {
+        width: 180px;
+        height: 135px;
+        bottom: 4.5rem;
+        right: 0.5rem;
     }
     
     .prescription-textarea {
@@ -1877,14 +1893,54 @@ body {
     
     .video-call-controls {
         bottom: 1rem;
-        padding: 0.75rem 1.5rem;
-        gap: 0.75rem;
+        right: 1rem;
+        gap: 0.5rem;
     }
     
     .control-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 1.2rem;
+        width: 48px;
+        height: 48px;
+        font-size: 1.1rem;
+    }
+    
+    .call-timer {
+        font-size: 0.9rem;
+    }
+    
+    .call-participant-name {
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .remote-video {
+        min-height: 300px;
+    }
+    
+    .local-video {
+        width: 120px;
+        height: 90px;
+        bottom: 4rem;
+        right: 0.5rem;
+    }
+    
+    .video-call-controls {
+        bottom: 0.75rem;
+        right: 0.75rem;
+    }
+    
+    .control-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1rem;
+    }
+    
+    .video-call-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .call-header-left {
+        gap: 1rem;
     }
 }
 

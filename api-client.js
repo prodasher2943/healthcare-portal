@@ -61,9 +61,14 @@ function initSocket() {
         // Notify server that user is online
         const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
         if (userData) {
+            // Get full user info from localStorage to send user_data to server
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+            const fullUserInfo = usersDB[userData.email] || userData;
+            
             socket.emit('userOnline', {
                 email: userData.email,
-                userType: userData.user_type
+                userType: userData.user_type || fullUserInfo.user_type,
+                userData: fullUserInfo.user_data || userData.user_data || {}
             });
         }
     });

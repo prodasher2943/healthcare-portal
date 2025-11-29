@@ -234,7 +234,7 @@ io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     
     // User goes online
-    socket.on('userOnline', ({ email, userType }) => {
+    socket.on('userOnline', ({ email, userType, userData }) => {
         if (!email) return;
 
         onlineUsers.set(email, socket.id);
@@ -250,9 +250,15 @@ io.on('connection', (socket) => {
                         : normalizedType === 'patient' ? 'Patient'
                         : normalizedType;
 
+        // Merge user_data from existing, provided userData, or keep empty object
+        const mergedUserData = {
+            ...(existing?.user_data || {}),
+            ...(userData || {})
+        };
+
         usersDB[email] = {
             email,
-            user_data: existing?.user_data || {},
+            user_data: mergedUserData,
             user_type: finalType,
             registered_date: existing?.registered_date || new Date().toISOString()
         };
