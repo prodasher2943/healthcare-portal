@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await localLoginUser(email, password);
             
             if (result.success) {
-                // Notify backend that this user is online (for global presence)
+                // Notify backend that this user is online (optional - fails gracefully if server unavailable)
                 try {
                     if (typeof socket !== 'undefined' && socket && socket.connected) {
                         const users = getUsersDB();
@@ -269,7 +269,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         socket.emit('userOnline', { email, userType });
                     }
                 } catch (err) {
-                    console.error('Error emitting userOnline after login:', err);
+                    // Silently fail - not critical for local login
+                    console.log('Socket connection unavailable (local mode):', err.message);
                 }
 
                 showMessage('login-message', `✅ ${result.message} Redirecting...`, 'success');
@@ -332,10 +333,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 // Also register on server for global availability (no password)
+                // This is optional - if server is not available, continue with local storage only
                 try {
                     await registerUserOnServer(email, userData, 'Patient');
                 } catch (e) {
-                    console.error('Error registering patient on server (fallback to local only):', e);
+                    // Silently fail - local storage is sufficient for login
+                    console.log('Server registration failed (using local storage only):', e.message);
                 }
                 
                 // Auto login after registration (local)
@@ -347,13 +350,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                // Let backend know this user is online
+                // Let backend know this user is online (optional - fails gracefully if server unavailable)
                 try {
                     if (typeof socket !== 'undefined' && socket && socket.connected) {
                         socket.emit('userOnline', { email, userType: 'Patient' });
                     }
                 } catch (err) {
-                    console.error('Error emitting userOnline after patient signup:', err);
+                    // Silently fail - not critical for local login
+                    console.log('Socket connection unavailable (local mode):', err.message);
                 }
 
                 // Clear any redirect flags to prevent interference
@@ -428,10 +432,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 // Also register on server for global availability (no password)
+                // This is optional - if server is not available, continue with local storage only
                 try {
                     await registerUserOnServer(email, userData, 'Doctor');
                 } catch (e) {
-                    console.error('Error registering doctor on server (fallback to local only):', e);
+                    // Silently fail - local storage is sufficient for login
+                    console.log('Server registration failed (using local storage only):', e.message);
                 }
                 
                 // Auto login after registration (local)
@@ -443,13 +449,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                // Let backend know this user is online (as doctor)
+                // Let backend know this user is online (optional - fails gracefully if server unavailable)
                 try {
                     if (typeof socket !== 'undefined' && socket && socket.connected) {
                         socket.emit('userOnline', { email, userType: 'Doctor' });
                     }
                 } catch (err) {
-                    console.error('Error emitting userOnline after doctor signup:', err);
+                    // Silently fail - not critical for local login
+                    console.log('Socket connection unavailable (local mode):', err.message);
                 }
 
                 // Clear any redirect flags to prevent interference

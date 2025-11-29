@@ -4,7 +4,25 @@
 // IMPORTANT: Update this URL when deploying to production
 // For local development: use window.location.origin
 // For production: use your deployed server URL (e.g., 'https://your-app.railway.app')
-const API_BASE_URL = 'https://web-production-33464.up.railway.app'; // Change to your deployed URL for internet access
+
+// Auto-detect if running locally or on deployed server
+function getApiBaseUrl() {
+    // Check if we're running on localhost or file://
+    const isLocal = window.location.hostname === 'localhost' || 
+                    window.location.hostname === '127.0.0.1' ||
+                    window.location.protocol === 'file:';
+    
+    if (isLocal) {
+        // Use localhost for local development
+        return 'http://localhost:3000';
+    } else {
+        // Use deployed server URL for production
+        return 'https://web-production-33464.up.railway.app';
+    }
+}
+
+const API_BASE_URL = getApiBaseUrl();
+console.log('API Base URL:', API_BASE_URL);
 
 // Initialize Socket.io connection
 let socket = null;
@@ -16,7 +34,23 @@ function initSocket() {
         return;
     }
     
-    socket = io(API_BASE_URL);
+    try {
+        socket = io(API_BASE_URL, {
+            transports: ['websocket', 'polling'],
+            timeout: 5000, // 5 second timeout
+            reconnection: false // Don't auto-reconnect if initial connection fails
+        });
+        
+        // Handle connection errors gracefully
+        socket.on('connect_error', (error) => {
+            console.log('Socket connection failed (local mode):', error.message);
+            isConnected = false;
+        });
+    } catch (error) {
+        console.log('Socket initialization failed (local mode):', error.message);
+        socket = null;
+        isConnected = false;
+    }
     
     socket.on('connect', () => {
         isConnected = true;
@@ -99,11 +133,13 @@ function initSocket() {
 async function apiRequest(endpoint, options = {}) {
     try {
         const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
+            method: options.method || 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 ...options.headers
             },
-            ...options
+            body: options.body,
+            mode: 'cors' // Explicitly set CORS mode
         });
         
         if (!response.ok) {
@@ -112,9 +148,17 @@ async function apiRequest(endpoint, options = {}) {
         
         return await response.json();
     } catch (error) {
+        // Check if it's a CORS/network error
+        if (error.message.includes('CORS') || 
+            error.message.includes('Failed to fetch') || 
+            error.name === 'TypeError' ||
+            error.message.includes('network') ||
+            error.message.includes('NetworkError')) {
+            console.log('Server unavailable (CORS/network error), using local storage only');
+            throw new Error('SERVER_UNAVAILABLE'); // Special error code for server unavailability
+        }
         console.error('API Request failed:', error);
-        // Fallback to localStorage if API fails
-        throw error;
+        throw error; // Re-throw other errors
     }
 }
 
@@ -129,21 +173,17 @@ async function registerUserOnServer(email, userData, userType) {
         
         // Also save to localStorage as backup
         const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
-        usersDB[email] = result.user;
-        localStorage.setItem('usersDB', JSON.stringify(usersDB));
+        if (result && result.user) {
+            usersDB[email] = result.user;
+            localStorage.setItem('usersDB', JSON.stringify(usersDB));
+        }
         
-        return result.user;
+        return result ? result.user : null;
     } catch (error) {
-        // Fallback to localStorage
-        const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
-        usersDB[email] = {
-            email,
-            user_data: userData,
-            user_type: userType,
-            registered_date: new Date().toISOString()
-        };
-        localStorage.setItem('usersDB', JSON.stringify(usersDB));
-        return usersDB[email];
+        // Silently fail - local storage is sufficient for login
+        // Don't throw error, just return null to indicate server registration failed
+        console.log('Server registration unavailable, using local storage only');
+        return null;
     }
 }
 
