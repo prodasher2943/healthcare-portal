@@ -4,7 +4,7 @@
 // IMPORTANT: Update this URL when deploying to production
 // For local development: use window.location.origin
 // For production: use your deployed server URL (e.g., 'https://your-app.railway.app')
-const API_BASE_URL = window.location.origin; // Change to your deployed URL for internet access
+const API_BASE_URL = 'https://web-production-33464.up.railway.app'; // Change to your deployed URL for internet access
 
 // Initialize Socket.io connection
 let socket = null;
@@ -118,8 +118,9 @@ async function apiRequest(endpoint, options = {}) {
     }
 }
 
-// User Management
-async function registerUser(email, userData, userType) {
+// User Management (server-side)
+// Register/update user profile on the server (no password here - password is handled locally)
+async function registerUserOnServer(email, userData, userType) {
     try {
         const result = await apiRequest('/users/register', {
             method: 'POST',
@@ -143,6 +144,20 @@ async function registerUser(email, userData, userType) {
         };
         localStorage.setItem('usersDB', JSON.stringify(usersDB));
         return usersDB[email];
+    }
+}
+
+// Get all users from server (for global doctor list, etc.)
+async function getAllUsers() {
+    try {
+        const users = await apiRequest('/users', {
+            method: 'GET'
+        });
+        return users; // Object keyed by email
+    } catch (error) {
+        console.error('Failed to fetch users from server:', error);
+        // Fallback to localStorage
+        return JSON.parse(localStorage.getItem('usersDB') || '{}');
     }
 }
 

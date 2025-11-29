@@ -30,8 +30,8 @@ function saveUsersDB(users) {
     localStorage.setItem('usersDB', JSON.stringify(users));
 }
 
-// Register a new user
-async function registerUser(email, password, userType, userData) {
+// Register a new user (local storage)
+async function localRegisterUser(email, password, userType, userData) {
     const users = getUsersDB();
     
     if (users[email]) {
@@ -50,8 +50,8 @@ async function registerUser(email, password, userType, userData) {
     return { success: true, message: 'Registration successful!' };
 }
 
-// Login user
-async function loginUser(email, password) {
+// Login user (local storage)
+async function localLoginUser(email, password) {
     const users = getUsersDB();
     
     if (!users[email]) {
@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            const result = await loginUser(email, password);
+            const result = await localLoginUser(email, password);
             
             if (result.success) {
                 showMessage('login-message', `✅ ${result.message} Redirecting...`, 'success');
@@ -265,12 +265,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 bio_data: bio
             };
             
-            const result = await registerUser(email, password, 'Patient', userData);
+            // First, register locally (for login)
+            const result = await localRegisterUser(email, password, 'Patient', userData);
             
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Auto login after registration
-                await loginUser(email, password);
+                // Also register on server for global availability (no password)
+                try {
+                    await registerUserOnServer(email, userData, 'Patient');
+                } catch (e) {
+                    console.error('Error registering patient on server (fallback to local only):', e);
+                }
+                
+                // Auto login after registration (local)
+                await localLoginUser(email, password);
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
                 }, 1000);
@@ -328,12 +336,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 proof_of_education_filename: proofFile.name
             };
             
-            const result = await registerUser(email, password, 'Doctor', userData);
+            // First, register locally (for login)
+            const result = await localRegisterUser(email, password, 'Doctor', userData);
             
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Auto login after registration
-                await loginUser(email, password);
+                // Also register on server for global availability (no password)
+                try {
+                    await registerUserOnServer(email, userData, 'Doctor');
+                } catch (e) {
+                    console.error('Error registering doctor on server (fallback to local only):', e);
+                }
+                
+                // Auto login after registration (local)
+                await localLoginUser(email, password);
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
                 }, 1000);

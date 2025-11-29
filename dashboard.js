@@ -850,13 +850,21 @@ async function loadAvailableDoctors() {
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
     if (!userData) return;
     
-    const users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    // Get users from server (with localStorage fallback)
+    let users = {};
+    try {
+        users = await getAllUsers();
+    } catch (error) {
+        console.error('Error fetching users from server, falling back to localStorage:', error);
+        users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    }
     
     // Get consultations from API (with localStorage fallback)
     let consultations = [];
     try {
         consultations = await getConsultations(userData.email, userData.user_type);
     } catch (error) {
+        console.error('Error fetching consultations from server, falling back to localStorage:', error);
         consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
     }
     
@@ -1416,23 +1424,39 @@ async function loadConsultationRequests() {
     }, 0);
 }
 
-function loadConsultationHistory() {
-    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
-    const users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+async function loadConsultationHistory() {
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    const historyList = document.getElementById('history-list');
+    
+    if (!historyList) return;
+    
     if (!userData) {
-        if (historyList) {
-            historyList.innerHTML = '<p class="empty-state">No user logged in.</p>';
-        }
+        historyList.innerHTML = '<p class="empty-state">No user logged in.</p>';
         return;
+    }
+    
+    // Get consultations from API (with localStorage fallback)
+    let consultations = [];
+    try {
+        consultations = await getConsultations(userData.email, userData.user_type);
+    } catch (error) {
+        console.error('Error fetching consultations from server, falling back to localStorage:', error);
+        consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    }
+    
+    // Get users from server (with localStorage fallback)
+    let users = {};
+    try {
+        users = await getAllUsers();
+    } catch (error) {
+        console.error('Error fetching users from server, falling back to localStorage:', error);
+        users = JSON.parse(localStorage.getItem('usersDB') || '{}');
     }
     
     const history = consultations.filter(c => 
         (c.doctorEmail === userData.email || c.patientEmail === userData.email) && 
         c.status !== 'pending'
     ).sort((a, b) => new Date(b.requestedDate) - new Date(a.requestedDate));
-    
-    const historyList = document.getElementById('history-list');
     
     if (history.length === 0) {
         historyList.innerHTML = '<p class="empty-state">No consultation history.</p>';
