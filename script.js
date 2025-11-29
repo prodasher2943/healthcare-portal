@@ -108,12 +108,14 @@ async function localLoginUser(email, password) {
         
         // User not found locally or password mismatch - try server login (cross-device)
         console.log('User not found locally, attempting server login for cross-device access...');
+        console.log(`🔑 Login attempt - Email: ${email}, Hash length: ${hashedPassword.length}`);
         
         // Check if loginUserOnServer function is available (from api-client.js)
         if (typeof loginUserOnServer === 'function') {
             const serverResult = await loginUserOnServer(email, hashedPassword);
             
             if (serverResult && serverResult.success && serverResult.user) {
+                console.log(`✅ Cross-device login successful for ${email}`);
                 // Server login successful - user downloaded to local storage
                 sessionStorage.setItem('currentUser', JSON.stringify({
                     email: email,
@@ -123,7 +125,9 @@ async function localLoginUser(email, password) {
                 return { success: true, message: 'Login successful!' };
             } else {
                 // Server login failed
-                return serverResult || { success: false, message: 'Email not found. Please register first.' };
+                const errorMsg = serverResult?.message || 'Email not found. Please register first.';
+                console.error(`❌ Server login failed for ${email}:`, errorMsg);
+                return serverResult || { success: false, message: errorMsg };
             }
         } else {
             // loginUserOnServer not available (api-client.js not loaded)
@@ -362,13 +366,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 // Also register on server for global availability (with password hash for cross-device login)
-                // This is optional - if server is not available, continue with local storage only
+                // This is CRITICAL for cross-device login - ensure it completes
                 try {
                     const hashedPassword = await hashPassword(password);
-                    await registerUserOnServer(email, userData, 'Patient', hashedPassword);
+                    console.log(`📝 Registering patient on server: ${email}`);
+                    const serverRegResult = await registerUserOnServer(email, userData, 'Patient', hashedPassword);
+                    if (serverRegResult) {
+                        console.log(`✅ Patient registered successfully on server: ${email}`);
+                    } else {
+                        console.warn(`⚠️ Server registration returned null for ${email} - cross-device login may not work`);
+                    }
                 } catch (e) {
-                    // Silently fail - local storage is sufficient for login
-                    console.log('Server registration failed (using local storage only):', e.message);
+                    // Log but continue - local storage is sufficient for same-device login
+                    console.error('❌ Server registration failed:', e);
+                    console.warn(`⚠️ Cross-device login may not work for ${email}`);
                 }
                 
                 // Auto login after registration (local)
@@ -462,13 +473,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 // Also register on server for global availability (with password hash for cross-device login)
-                // This is optional - if server is not available, continue with local storage only
+                // This is CRITICAL for cross-device login - ensure it completes
                 try {
                     const hashedPassword = await hashPassword(password);
-                    await registerUserOnServer(email, userData, 'Doctor', hashedPassword);
+                    console.log(`📝 Registering doctor on server: ${email}`);
+                    const serverRegResult = await registerUserOnServer(email, userData, 'Doctor', hashedPassword);
+                    if (serverRegResult) {
+                        console.log(`✅ Doctor registered successfully on server: ${email}`);
+                    } else {
+                        console.warn(`⚠️ Server registration returned null for ${email} - cross-device login may not work`);
+                    }
                 } catch (e) {
-                    // Silently fail - local storage is sufficient for login
-                    console.log('Server registration failed (using local storage only):', e.message);
+                    // Log but continue - local storage is sufficient for same-device login
+                    console.error('❌ Server registration failed:', e);
+                    console.warn(`⚠️ Cross-device login may not work for ${email}`);
                 }
                 
                 // Auto login after registration (local)

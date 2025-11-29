@@ -60,13 +60,32 @@ app.post('/api/users/register', (req, res) => {
     // Get existing user to preserve password if updating
     const existing = usersDB[email];
     
+    // IMPORTANT: Always store password hash if provided
+    // Priority: new passwordHash > existing password_hash > null
+    const finalPasswordHash = passwordHash || existing?.password_hash || null;
+    
+    if (passwordHash) {
+        console.log(`🔐 Storing NEW password hash for ${email} (length: ${passwordHash.length})`);
+    } else if (existing?.password_hash) {
+        console.log(`🔐 Preserving existing password hash for ${email} (length: ${existing.password_hash.length})`);
+    } else {
+        console.warn(`⚠️ WARNING: No password hash provided or existing for ${email} - cross-device login will NOT work!`);
+    }
+    
     usersDB[email] = {
         email,
         user_data: userData,
         user_type: userType,
-        password_hash: passwordHash || existing?.password_hash, // Store hashed password for cross-device login
+        password_hash: finalPasswordHash, // Store hashed password for cross-device login
         registered_date: existing?.registered_date || new Date().toISOString()
     };
+    
+    // Verify password_hash was stored
+    if (usersDB[email].password_hash) {
+        console.log(`✅ Password hash stored successfully for ${email} (length: ${usersDB[email].password_hash.length})`);
+    } else {
+        console.error(`❌ CRITICAL ERROR: Password hash NOT stored for ${email}! Cross-device login will fail!`);
+    }
     
     res.json({ success: true, user: usersDB[email] });
 });
@@ -79,16 +98,40 @@ app.post('/api/users/login', (req, res) => {
         return res.status(400).json({ error: 'Email and password hash are required' });
     }
     
+    console.log(`🔑 Login attempt for: ${email}`);
+    console.log(`🔑 Provided hash length: ${passwordHash?.length || 0}`);
+    
     const user = usersDB[email];
     
     if (!user) {
+        console.log(`❌ User not found: ${email}`);
         return res.status(404).json({ error: 'Email not found. Please register first.' });
     }
     
+    console.log(`📋 User found in usersDB. Stored hash exists: ${!!user.password_hash}`);
+    if (user.password_hash) {
+        console.log(`📋 Stored hash length: ${user.password_hash.length}`);
+        console.log(`🔍 Hash comparison: ${user.password_hash === passwordHash ? 'MATCH ✅' : 'MISMATCH ❌'}`);
+        
+        // Log first few and last few characters for debugging (not the whole hash)
+        if (user.password_hash !== passwordHash) {
+            console.log(`🔍 Provided hash starts with: ${passwordHash.substring(0, 10)}...`);
+            console.log(`🔍 Stored hash starts with: ${user.password_hash.substring(0, 10)}...`);
+        }
+    }
+    
     // Verify password hash matches
-    if (!user.password_hash || user.password_hash !== passwordHash) {
+    if (!user.password_hash) {
+        console.error(`❌ No password_hash stored for user ${email}`);
+        return res.status(401).json({ error: 'No password set for this account. Please register again.' });
+    }
+    
+    if (user.password_hash !== passwordHash) {
+        console.error(`❌ Password hash mismatch for ${email}`);
         return res.status(401).json({ error: 'Incorrect password.' });
     }
+    
+    console.log(`✅ Login successful for ${email}`);
     
     // Return user data (without password hash for security)
     const { password_hash, ...userWithoutPassword } = user;
@@ -311,12 +354,27 @@ io.on('connection', (socket) => {
             ...(userData || {})
         };
 
+        // Preserve password_hash when updating user info - NEVER overwrite it with null if it exists
+        const preservedPasswordHash = existing?.password_hash || null;
+        
+        if (existing && existing.password_hash && !preservedPasswordHash) {
+            console.error(`❌ CRITICAL: Password hash would be lost for ${email}! Preserving...`);
+        }
+        
         usersDB[email] = {
             email,
             user_data: mergedUserData,
             user_type: finalType,
+            password_hash: preservedPasswordHash, // IMPORTANT: Preserve password hash - never overwrite if it exists
             registered_date: existing?.registered_date || new Date().toISOString()
         };
+        
+        // Log if password_hash is missing (but don't block - might not have registered yet)
+        if (!usersDB[email].password_hash) {
+            console.log(`⚠️ No password_hash stored for ${email} yet - user may need to complete registration`);
+        } else {
+            console.log(`✅ Password hash preserved for ${email} (length: ${usersDB[email].password_hash.length})`);
+        }
         
         // Notify others if doctor came online - check both normalized and original types
         const isDoctor = finalType.toLowerCase() === 'doctor' || 

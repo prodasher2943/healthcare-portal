@@ -510,45 +510,772 @@ body {
     margin-right: 0.5rem;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .welcome-card {
+/* ========================================
+   RESPONSIVE DESIGN - COMPREHENSIVE
+   ======================================== */
+
+/* Large tablets and small desktops */
+@media (max-width: 1400px) {
+    .patient-layout {
+        grid-template-columns: 280px 1fr 280px;
+    }
+}
+
+/* Tablets */
+@media (max-width: 1200px) {
+    .patient-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .dashboard-content {
         padding: 2rem;
     }
+    
+    .medicine-schedule-panel,
+    .chatbot-panel,
+    .consultation-panel {
+        height: auto;
+        min-height: 500px;
+        max-height: 70vh;
+    }
+}
 
+/* Medium tablets */
+@media (max-width: 992px) {
+    .doctor-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .welcome-card {
+        padding: 2.5rem;
+        max-width: 90%;
+    }
+    
+    .dashboard-content {
+        padding: 1.5rem;
+    }
+    
+    .dashboard-header {
+        padding: 2rem;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 2rem;
+    }
+    
+    .panel-header {
+        padding: 1.25rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .panel-header h3 {
+        font-size: 1.2rem;
+    }
+    
+    .modal-content {
+        max-width: 90%;
+        padding: 1.5rem;
+        margin: 10% auto;
+    }
+}
+
+/* Small tablets and large phones */
+@media (max-width: 768px) {
+    /* Index/Login Page */
+    .container {
+        padding: 1rem;
+    }
+    
+    .welcome-card {
+        padding: 2rem;
+        border-radius: 20px;
+    }
+    
     .welcome-title {
         font-size: 2rem;
     }
-
+    
+    .welcome-subtitle {
+        font-size: 1rem;
+    }
+    
+    .card-header {
+        margin-bottom: 1.5rem;
+    }
+    
+    .auth-tabs {
+        margin-bottom: 1.5rem;
+    }
+    
+    .tab-btn {
+        padding: 0.875rem;
+        font-size: 1rem;
+    }
+    
+    .role-selection {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+    }
+    
+    .role-selection h3 {
+        font-size: 1.1rem;
+    }
+    
+    .role-buttons {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .role-btn {
+        padding: 0.875rem;
+    }
+    
+    .form {
+        gap: 1.25rem;
+    }
+    
+    .form h3 {
+        font-size: 1.2rem;
+    }
+    
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        padding: 0.75rem;
+        font-size: 0.95rem;
+    }
+    
+    .btn-primary {
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+    }
+    
+    /* Dashboard */
     .dashboard-nav {
         padding: 1rem 1.5rem;
         flex-direction: column;
         gap: 1rem;
+        align-items: flex-start;
     }
-
+    
+    .nav-brand h2 {
+        font-size: 1.3rem;
+    }
+    
+    .btn-logout {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 0.95rem;
+    }
+    
     .dashboard-content {
+        padding: 1rem;
+    }
+    
+    .dashboard-header {
         padding: 1.5rem;
+        margin-bottom: 1.5rem;
     }
-
+    
     .dashboard-header h1 {
-        font-size: 2rem;
+        font-size: 1.75rem;
     }
-
-    .role-buttons {
+    
+    .dashboard-header p {
+        font-size: 1rem;
+    }
+    
+    /* Patient Layout */
+    .patient-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .medicine-schedule-panel,
+    .chatbot-panel,
+    .consultation-panel {
+        height: auto;
+        min-height: 450px;
+        max-height: 60vh;
+    }
+    
+    .panel-header {
+        padding: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .panel-content {
+        padding: 1rem;
+    }
+    
+    /* Chat Header */
+    .chat-header-left {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    #chat-title {
+        font-size: 1.1rem;
+        max-width: 200px;
+    }
+    
+    .btn-chat-menu {
+        padding: 0.4rem 0.6rem;
+        font-size: 1rem;
+    }
+    
+    .btn-new-chat {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+    }
+    
+    .ai-status {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    /* Chat Messages */
+    .message-content {
+        max-width: 85%;
+        padding: 0.875rem;
+    }
+    
+    .message-avatar {
+        font-size: 1.75rem;
+    }
+    
+    .chat-input-container {
+        padding: 0.875rem;
+    }
+    
+    .chat-input {
+        padding: 0.75rem;
+        font-size: 0.95rem;
+    }
+    
+    .btn-send {
+        padding: 0.75rem 1.25rem;
+        font-size: 1.1rem;
+    }
+    
+    /* Doctor Layout */
+    .doctor-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .requests-panel,
+    .history-panel {
+        min-height: 450px;
+        max-height: 60vh;
+    }
+    
+    /* Request/History Cards */
+    .request-card,
+    .history-card {
+        padding: 1.25rem;
+    }
+    
+    .request-header,
+    .history-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .request-actions {
         flex-direction: column;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+    
+    .btn-secondary {
+        width: 100%;
+        padding: 0.75rem;
+    }
+    
+    /* Modals */
+    .modal-content {
+        max-width: 95%;
+        padding: 1.5rem;
+        margin: 5% auto;
+        max-height: 90vh;
+        border-radius: 15px;
+    }
+    
+    .close {
+        right: 1rem;
+        top: 1rem;
+        font-size: 1.75rem;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1.25rem;
+    }
+    
+    .consultation-section {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.25rem;
+    }
+    
+    .doctors-list {
+        gap: 0.75rem;
+    }
+    
+    .doctor-card {
+        padding: 1.25rem;
+    }
+    
+    .doctor-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .doctor-card-header h4 {
+        min-width: auto;
+    }
+    
+    /* File Upload */
+    .file-upload-label {
+        padding: 1.25rem;
+    }
+    
+    /* Medicine Schedule */
+    .medicine-item {
+        padding: 0.875rem;
+    }
+    
+    .medicine-header h4 {
+        font-size: 1rem;
+    }
+    
+    .medicine-details {
+        font-size: 0.85rem;
     }
 }
 
-/* Loading Animation */
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
+/* Small phones */
+@media (max-width: 480px) {
+    /* Index/Login Page */
+    .container {
+        padding: 0.5rem;
     }
-    50% {
-        opacity: 0.5;
+    
+    .welcome-card {
+        padding: 1.5rem;
+        border-radius: 15px;
+    }
+    
+    .welcome-title {
+        font-size: 1.75rem;
+    }
+    
+    .welcome-subtitle {
+        font-size: 0.9rem;
+    }
+    
+    .card-header {
+        margin-bottom: 1rem;
+    }
+    
+    .auth-tabs {
+        margin-bottom: 1rem;
+        gap: 0.5rem;
+    }
+    
+    .tab-btn {
+        padding: 0.75rem;
+        font-size: 0.95rem;
+    }
+    
+    .role-selection {
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+    }
+    
+    .role-selection h3 {
+        font-size: 1rem;
+    }
+    
+    .role-buttons {
+        gap: 0.5rem;
+    }
+    
+    .role-btn {
+        padding: 0.75rem;
+        font-size: 0.95rem;
+    }
+    
+    .form {
+        gap: 1rem;
+    }
+    
+    .form h3 {
+        font-size: 1.1rem;
+    }
+    
+    .form-group {
+        gap: 0.4rem;
+    }
+    
+    .form-group label {
+        font-size: 0.9rem;
+    }
+    
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        padding: 0.7rem;
+        font-size: 0.9rem;
+    }
+    
+    .form-group textarea {
+        min-height: 80px;
+    }
+    
+    .btn-primary {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.95rem;
+        width: 100%;
+    }
+    
+    /* Dashboard */
+    .dashboard-nav {
+        padding: 0.75rem 1rem;
+    }
+    
+    .nav-brand h2 {
+        font-size: 1.1rem;
+    }
+    
+    .btn-logout {
+        padding: 0.7rem;
+        font-size: 0.9rem;
+    }
+    
+    .dashboard-content {
+        padding: 0.75rem;
+    }
+    
+    .dashboard-header {
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        border-radius: 15px;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .dashboard-header p {
+        font-size: 0.9rem;
+    }
+    
+    /* Patient Layout */
+    .patient-layout {
+        gap: 0.75rem;
+    }
+    
+    .medicine-schedule-panel,
+    .chatbot-panel,
+    .consultation-panel {
+        min-height: 400px;
+        max-height: 55vh;
+        border-radius: 12px;
+    }
+    
+    .panel-header {
+        padding: 0.875rem;
+    }
+    
+    .panel-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .panel-content {
+        padding: 0.875rem;
+    }
+    
+    /* Chat */
+    #chat-title {
+        font-size: 1rem;
+        max-width: 150px;
+    }
+    
+    .btn-chat-menu {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .btn-new-chat {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.8rem;
+    }
+    
+    .ai-status {
+        padding: 0.15rem 0.4rem;
+        font-size: 0.7rem;
+    }
+    
+    .chat-list-dropdown {
+        max-height: 350px;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .chat-list-header {
+        padding: 0.875rem;
+    }
+    
+    .chat-list-header h4 {
+        font-size: 0.95rem;
+    }
+    
+    .chat-list-item {
+        padding: 0.875rem;
+    }
+    
+    .chat-list-item-title {
+        font-size: 0.9rem;
+    }
+    
+    .chat-list-item-meta {
+        font-size: 0.75rem;
+    }
+    
+    .message-content {
+        max-width: 90%;
+        padding: 0.75rem;
+    }
+    
+    .message-avatar {
+        font-size: 1.5rem;
+    }
+    
+    .message-time {
+        font-size: 0.7rem;
+    }
+    
+    .chat-input-container {
+        padding: 0.75rem;
+        gap: 0.4rem;
+    }
+    
+    .chat-input {
+        padding: 0.7rem;
+        font-size: 0.9rem;
+    }
+    
+    .btn-send {
+        padding: 0.7rem 1rem;
+        font-size: 1rem;
+    }
+    
+    /* Doctor Layout */
+    .requests-panel,
+    .history-panel {
+        min-height: 400px;
+        max-height: 55vh;
+        border-radius: 12px;
+    }
+    
+    .request-card,
+    .history-card {
+        padding: 1rem;
+    }
+    
+    .request-header h4,
+    .history-header h4 {
+        font-size: 1rem;
+    }
+    
+    .request-date,
+    .history-date {
+        font-size: 0.8rem;
+    }
+    
+    .request-summary,
+    .patient-info {
+        padding: 0.875rem;
+        font-size: 0.85rem;
+    }
+    
+    .btn-secondary {
+        padding: 0.7rem;
+        font-size: 0.9rem;
+    }
+    
+    .status-badge {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
+    }
+    
+    /* Modals */
+    .modal-content {
+        max-width: 98%;
+        padding: 1.25rem;
+        margin: 3% auto;
+        border-radius: 12px;
+    }
+    
+    .close {
+        right: 0.75rem;
+        top: 0.75rem;
+        font-size: 1.5rem;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .consultation-section {
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+    }
+    
+    .consultation-section h3 {
+        font-size: 1.1rem;
+    }
+    
+    .summary-content {
+        padding: 0.875rem;
+        font-size: 0.85rem;
+    }
+    
+    .doctor-card {
+        padding: 1rem;
+    }
+    
+    .doctor-card h4 {
+        font-size: 1rem;
+    }
+    
+    .doctor-card p {
+        font-size: 0.85rem;
+    }
+    
+    .online-badge,
+    .offline-badge,
+    .consulted-badge {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.7rem;
+    }
+    
+    .file-upload-label {
+        padding: 1rem;
+    }
+    
+    .file-upload-label span:first-child {
+        font-size: 0.9rem;
+    }
+    
+    /* Medicine */
+    .medicine-item {
+        padding: 0.75rem;
+    }
+    
+    .medicine-header h4 {
+        font-size: 0.95rem;
+    }
+    
+    .medicine-details {
+        font-size: 0.8rem;
+    }
+    
+    /* Background Animation - smaller on mobile */
+    .circle-1 {
+        width: 200px;
+        height: 200px;
+    }
+    
+    .circle-2 {
+        width: 150px;
+        height: 150px;
+    }
+    
+    .circle-3 {
+        width: 100px;
+        height: 100px;
     }
 }
 
+/* Extra small phones */
+@media (max-width: 360px) {
+    .welcome-title {
+        font-size: 1.5rem;
+    }
+    
+    .dashboard-header h1 {
+        font-size: 1.25rem;
+    }
+    
+    .panel-header h3 {
+        font-size: 1rem;
+    }
+    
+    .message-content {
+        max-width: 95%;
+    }
+    
+    .modal-content {
+        padding: 1rem;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Landscape orientation on mobile */
+@media (max-height: 600px) and (max-width: 768px) {
+    .medicine-schedule-panel,
+    .chatbot-panel,
+    .consultation-panel,
+    .requests-panel,
+    .history-panel {
+        max-height: 75vh;
+        min-height: 350px;
+    }
+    
+    .video-call-sidebar {
+        max-height: 50vh;
+    }
+    
+    .remote-video {
+        min-height: 350px;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger touch targets */
+    .btn-primary,
+    .btn-secondary,
+    .btn-logout,
+    .btn-send {
+        min-height: 44px;
+    }
+    
+    .control-btn {
+        min-width: 48px;
+        min-height: 48px;
+    }
+    
+    .tab-btn,
+    .role-btn {
+        min-height: 44px;
+    }
+    
+    /* Remove hover effects that don't work on touch */
+    .btn-primary:active,
+    .btn-secondary:active {
+        transform: scale(0.98);
+    }
+}
+
+/* Loading Animation - Moved to after responsive styles to avoid conflicts */
 .loading {
     animation: pulse 1.5s ease-in-out infinite;
 }
@@ -1606,11 +2333,6 @@ body {
     animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
 /* Video Call Controls */
 .video-call-controls {
     position: absolute;
@@ -1974,6 +2696,68 @@ body {
     line-height: 1.6;
 }
 
+/* Doctor Search Container */
+.doctor-search-container {
+    margin: 1.5rem 0;
+}
+
+.doctor-search-container .form-group {
+    margin-bottom: 0;
+}
+
+.doctor-search-container input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+    font-family: 'Poppins', sans-serif;
+}
+
+.doctor-search-container input:focus {
+    border-color: #667eea;
+    outline: none;
+}
+
+.doctor-search-container p {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+/* Responsive adjustments for doctor search */
+@media (max-width: 768px) {
+    .doctor-search-container {
+        margin: 1rem 0;
+    }
+    
+    .doctor-search-container input {
+        padding: 0.7rem;
+        font-size: 0.95rem;
+    }
+    
+    .doctor-search-container p {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .doctor-search-container {
+        margin: 0.75rem 0;
+    }
+    
+    .doctor-search-container input {
+        padding: 0.65rem;
+        font-size: 0.9rem;
+    }
+    
+    .doctor-search-container p {
+        font-size: 0.75rem;
+        margin-top: 0.4rem;
+    }
+}
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
     width: 8px;
@@ -1991,5 +2775,12 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #764ba2;
+}
+
+/* Mobile scrollbar - thinner */
+@media (max-width: 768px) {
+    ::-webkit-scrollbar {
+        width: 6px;
+    }
 }
 

@@ -425,30 +425,41 @@ async function apiRequest(endpoint, options = {}) {
 // Register/update user profile on the server (includes password hash for cross-device login)
 async function registerUserOnServer(email, userData, userType, passwordHash) {
     try {
+        console.log(`📝 Registering user on server: ${email}, passwordHash length: ${passwordHash?.length || 0}`);
+        
         const result = await apiRequest('/users/register', {
             method: 'POST',
             body: JSON.stringify({ email, userData, userType, passwordHash })
         });
         
-        // Also save to localStorage as backup
-        // IMPORTANT: Preserve the password from local storage
-        const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
-        if (result && result.user) {
-            // Preserve the password and other local-only fields
+        console.log(`📝 Server registration response:`, result ? 'Success' : 'Failed');
+        
+        if (result && result.success && result.user) {
+            console.log(`✅ User registered on server: ${email}`);
+            
+            // Verify password_hash was stored on server
+            // Note: The server response doesn't include password_hash (for security),
+            // but we trust it was stored since registration succeeded
+            
+            // Also save to localStorage as backup
+            // IMPORTANT: Preserve the password from local storage
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
             const existingUser = usersDB[email] || {};
             usersDB[email] = {
                 ...result.user, // Server data (user_data, user_type, etc.)
-                password: existingUser.password, // Preserve password from local registration
+                password: existingUser.password || passwordHash, // Preserve password from local registration or use hash
                 registered_date: existingUser.registered_date || result.user.registered_date
             };
             localStorage.setItem('usersDB', JSON.stringify(usersDB));
+            
+            console.log(`✅ User data synced to localStorage for ${email}`);
         }
         
         return result ? result.user : null;
     } catch (error) {
-        // Silently fail - local storage is sufficient for login
-        // Don't throw error, just return null to indicate server registration failed
-        console.log('Server registration unavailable, using local storage only');
+        // Log the error but don't throw - local storage is sufficient for login
+        console.error('❌ Server registration failed:', error);
+        console.log('⚠️ Continuing with local storage only');
         return null;
     }
 }
@@ -456,29 +467,47 @@ async function registerUserOnServer(email, userData, userType, passwordHash) {
 // Login on server (for cross-device login)
 async function loginUserOnServer(email, passwordHash) {
     try {
+        console.log(`🔑 Attempting server login for: ${email}`);
+        console.log(`🔑 Password hash length: ${passwordHash?.length || 0}`);
+        console.log(`🔑 Password hash preview: ${passwordHash ? passwordHash.substring(0, 10) + '...' : 'N/A'}`);
+        
         const result = await apiRequest('/users/login', {
             method: 'POST',
             body: JSON.stringify({ email, passwordHash })
         });
         
+        console.log('🔑 Server login response received:', result ? 'Has result' : 'No result');
+        
         if (result && result.success && result.user) {
+            console.log(`✅ Server login successful for ${email}`);
+            
             // Store user in localStorage for future logins
             const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
             const existingUser = usersDB[email] || {};
             
+            // IMPORTANT: Store the passwordHash that successfully logged in
+            // This ensures future logins on this device will work
             usersDB[email] = {
                 ...result.user,
-                password: existingUser.password || passwordHash, // Use existing password or current hash
+                password: passwordHash, // Store the hash that worked for login
                 registered_date: existingUser.registered_date || result.user.registered_date
             };
             
             localStorage.setItem('usersDB', JSON.stringify(usersDB));
+            console.log(`✅ User data and password hash saved to localStorage for ${email}`);
+            
             return { success: true, user: usersDB[email] };
         }
         
+        console.error('❌ Server login failed - no success response');
         return { success: false, message: 'Login failed' };
     } catch (error) {
-        console.error('Failed to login on server:', error);
+        console.error('❌ Failed to login on server:', error);
+        console.error('❌ Error details:', {
+            message: error.message,
+            status: error.status,
+            name: error.name
+        });
         
         // Handle server unavailable
         if (error.message === 'SERVER_UNAVAILABLE') {
@@ -489,7 +518,7 @@ async function loginUserOnServer(email, passwordHash) {
         if (error.status === 404 || (error.message && error.message.includes('404'))) {
             return { success: false, message: 'Email not found. Please register first.' };
         }
-        if (error.status === 401 || (error.message && error.message.includes('401'))) {
+        if (error.status === 401 || (error.message && error.message.includes('401')) || (error.message && error.message.includes('Incorrect password'))) {
             return { success: false, message: 'Incorrect password. Please try again.' };
         }
         if (error.status === 400 || (error.message && error.message.includes('400'))) {
