@@ -19,6 +19,18 @@
             <div class="nav-brand">
                 <h2>🏥 Healthcare Portal</h2>
             </div>
+            <div class="nav-center">
+                <div class="medicine-search-container">
+                    <input 
+                        type="text" 
+                        id="medicine-search-input" 
+                        placeholder="🔍 Search medicine (e.g., Paracetamol, Aspirin...)"
+                        onkeypress="handleMedicineSearchKeyPress(event)"
+                        class="medicine-search-input"
+                    />
+                    <button class="btn-search-medicine" onclick="searchMedicine()" title="Search Medicine">🔍</button>
+                </div>
+            </div>
             <button class="btn-logout" onclick="logout()">🚪 Logout</button>
         </nav>
 
@@ -180,6 +192,22 @@
                 </div>
                 <button type="submit" class="btn-primary">Add Medicine</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Medicine Information Modal -->
+    <div id="medicine-info-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeMedicineInfoModal()">&times;</span>
+            <h2>💊 Medicine Information</h2>
+            <div id="medicine-info-content">
+                <div style="text-align: center; padding: 3rem; color: #666;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">💊</div>
+                    <h3 style="color: #333; margin-bottom: 0.5rem;">Search Medicine Information</h3>
+                    <p style="font-size: 0.95rem;">Enter a medicine name in the search bar above to get comprehensive information.</p>
+                    <p style="font-size: 0.85rem; margin-top: 0.5rem; color: #999;">You can search by generic name (e.g., "Paracetamol") or brand name (e.g., "Tylenol")</p>
+                </div>
+            </div>
         </div>
     </div>
 

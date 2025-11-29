@@ -329,9 +329,16 @@ async function sendMessageWithREST(message, typingId) {
     }
     
     // Prepare the complete prompt - asking for concise responses
-    const fullPrompt = `You are an AI medical assistant. Provide helpful medical guidance, diagnosis suggestions, treatment recommendations, and medication information. Be professional, empathetic, and remind users to consult real doctors for serious conditions, not always, just when the problem is serious.
+    const fullPrompt = `You are an AI medical assistant. Provide helpful medical guidance, diagnosis suggestions, treatment recommendations, and medication information. Be professional, empathetic, and helpful.
 
-IMPORTANT: Keep your responses CONCISE and to the point. Aim for 2-6 sentences maximum unless more detail is absolutely necessary. Be clear and direct. Provide treatment advice like a real doctor would.
+CRITICAL GUIDELINES:
+1. DO NOT assume or jump to conclusions based on limited information. If the patient provides only 1-2 lines about their problem, ALWAYS ask follow-up questions to gather more relevant information before providing any diagnosis or treatment advice.
+2. Ask specific, relevant questions like: "When did this start?", "Can you describe the severity?", "Any other symptoms?", "Have you taken any medications?", etc.
+3. Only provide diagnosis/treatment suggestions after you have gathered sufficient information through follow-up questions.
+4. If the patient asks for permission/allows/requests to consult with a real doctor, IMMEDIATELY grant permission and say something like: "Yes, absolutely! You can now consult with a real doctor. The consultation option has been enabled."
+5. After providing a helpful response or when the conversation seems complete, you may suggest consulting a real doctor if appropriate.
+
+IMPORTANT: Keep your responses CONCISE but thorough. Aim for 2-6 sentences when providing information, but don't hesitate to ask follow-up questions when needed. Be clear and direct. Provide treatment advice like a real doctor would.
 
 Current question: ${message}${conversationContext}
 
@@ -341,7 +348,10 @@ Please provide a helpful, concise medical response:`;
     // Call Gemini API via server endpoint (secure - API key not exposed)
     console.log('Calling Gemini API via server endpoint');
     
-    const response = await fetch(`${API_BASE_URL}/api/gemini/chat`, {
+    // Get API_BASE_URL from api-client.js (it's defined globally there)
+    const apiBaseUrl = typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : (window.location.origin.includes('localhost') ? 'http://localhost:3000' : window.location.origin);
+    
+    const response = await fetch(`${apiBaseUrl}/api/gemini/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -443,13 +453,75 @@ Please provide a helpful, concise medical response:`;
         
         // Title generation is now handled in addMessageToChat after saveChats()
         
-        // Check if diagnosis seems complete
-        if (aiResponse.toLowerCase().includes('diagnosis') || 
-            aiResponse.toLowerCase().includes('treatment') ||
-            aiResponse.toLowerCase().includes('medication') ||
-            aiResponse.toLowerCase().includes('medicine')) {
+        // Check if patient asked for permission to consult (in their message)
+        const userMessage = message.toLowerCase();
+        const askedForPermission = userMessage.includes('can i consult') || 
+                                   userMessage.includes('may i consult') ||
+                                   userMessage.includes('allow me to consult') ||
+                                   userMessage.includes('permission to consult') ||
+                                   userMessage.includes('want to consult') ||
+                                   userMessage.includes('would like to consult') ||
+                                   userMessage.includes('consult a doctor') ||
+                                   userMessage.includes('consult with a doctor') ||
+                                   userMessage.includes('see a doctor') ||
+                                   userMessage.includes('talk to a doctor');
+        
+        // Check if AI granted permission or conversation seems complete
+        const aiResponseLower = aiResponse.toLowerCase();
+        const aiGrantedPermission = aiResponseLower.includes('consult with a real doctor') ||
+                                   aiResponseLower.includes('consultation option') ||
+                                   aiResponseLower.includes('consultation has been enabled') ||
+                                   aiResponseLower.includes('you can now consult') ||
+                                   aiResponseLower.includes('absolutely! you can');
+        
+        // Check if diagnosis/consultation seems complete
+        const diagnosisComplete = aiResponseLower.includes('diagnosis') || 
+                                  aiResponseLower.includes('treatment') ||
+                                  aiResponseLower.includes('medication') ||
+                                  aiResponseLower.includes('medicine') ||
+                                  aiResponseLower.includes('suggest consulting') ||
+                                  aiResponseLower.includes('recommend consulting') ||
+                                  aiResponseLower.includes('consult a doctor') ||
+                                  aiResponseLower.includes('see a doctor') ||
+                                  aiResponseLower.includes('seek medical');
+        
+        // Unlock consultation if:
+        // 1. Patient asked for permission and AI granted it, OR
+        // 2. Patient asked for permission, OR
+        // 3. Conversation seems complete (diagnosis/treatment provided)
+        if (askedForPermission || aiGrantedPermission || diagnosisComplete) {
             markDiagnosisComplete(aiResponse);
         }
+        
+        // Also check after a few messages if conversation seems naturally complete
+        // Use setTimeout to ensure messages are saved first
+        setTimeout(() => {
+            const updatedChat = chats[currentChatId];
+            if (updatedChat && updatedChat.messages && !updatedChat.consultationUnlocked) {
+                const messageCount = updatedChat.messages.length;
+                if (messageCount >= 4) {
+                    // Check if conversation has natural ending signals
+                    const lastFewMessages = updatedChat.messages.slice(-4).map(m => m.text.toLowerCase()).join(' ');
+                    const hasEndingSignals = lastFewMessages.includes('thank') ||
+                                             lastFewMessages.includes('that helps') ||
+                                             lastFewMessages.includes('got it') ||
+                                             lastFewMessages.includes('understand') ||
+                                             lastFewMessages.includes('clear') ||
+                                             lastFewMessages.includes('okay') ||
+                                             lastFewMessages.includes('ok');
+                    
+                    const hasCompletionSignals = aiResponseLower.includes('consult') ||
+                                                 aiResponseLower.includes('doctor') ||
+                                                 aiResponseLower.includes('complete') ||
+                                                 aiResponseLower.includes('finished') ||
+                                                 diagnosisComplete;
+                    
+                    if (hasEndingSignals && hasCompletionSignals) {
+                        markDiagnosisComplete(aiResponse);
+                    }
+                }
+            }
+        }, 500);
         } else {
             console.error('Unexpected response format. Full response:', JSON.stringify(data, null, 2));
             addMessageToChat('I apologize, but I encountered an unexpected response format. The API response structure was different than expected. Please check the browser console (F12) for details and verify your API key is correct.', 'bot');
@@ -491,7 +563,8 @@ Title:`;
         
         console.log('Generating chat title via server endpoint...');
         
-        const response = await fetch(`${API_BASE_URL}/api/gemini/title`, {
+        const apiBaseUrl = typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : (window.location.origin.includes('localhost') ? 'http://localhost:3000' : window.location.origin);
+        const response = await fetch(`${apiBaseUrl}/api/gemini/title`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -643,6 +716,8 @@ function markDiagnosisComplete(diagnosisText) {
         saveChats();
         showConsultationOption();
         loadChatList(); // Update chat list to show consultation badge
+        
+        console.log('✅ Consultation option unlocked for chat:', currentChatId);
     }
 }
 
@@ -1100,7 +1175,8 @@ ${conversationText}
 
 Summary:`;
         
-        const response = await fetch(`${API_BASE_URL}/api/gemini/summary`, {
+        const apiBaseUrl = typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : (window.location.origin.includes('localhost') ? 'http://localhost:3000' : window.location.origin);
+        const response = await fetch(`${apiBaseUrl}/api/gemini/summary`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -3076,6 +3152,277 @@ window.onclick = function(event) {
     }
     if (event.target === consultationModal) {
         closeConsultationModal();
+    }
+    
+    const medicineInfoModal = document.getElementById('medicine-info-modal');
+    if (event.target === medicineInfoModal) {
+        closeMedicineInfoModal();
+    }
+}
+
+// ========================================
+// MEDICINE SEARCH FUNCTIONALITY
+// ========================================
+
+// Handle Enter key in medicine search
+function handleMedicineSearchKeyPress(event) {
+    if (event.key === 'Enter') {
+        searchMedicine();
+    }
+}
+
+// Search for medicine information
+async function searchMedicine() {
+    const input = document.getElementById('medicine-search-input');
+    const medicineName = input.value.trim();
+    
+    if (!medicineName) {
+        // If empty, open modal with placeholder
+        const modal = document.getElementById('medicine-info-modal');
+        if (modal) {
+            modal.style.display = 'block';
+        }
+        return;
+    }
+    
+    // Show modal with loading state
+    const modal = document.getElementById('medicine-info-modal');
+    const content = document.getElementById('medicine-info-content');
+    
+    if (!modal || !content) {
+        console.error('Medicine info modal not found');
+        return;
+    }
+    
+    modal.style.display = 'block';
+    content.innerHTML = `
+        <div class="medicine-search-loading" style="text-align: center; padding: 2rem;">
+            <div class="loading-spinner"></div>
+            <p>Searching for information about <strong>${medicineName}</strong>...</p>
+            <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">This may take a few seconds</p>
+        </div>
+    `;
+    
+    try {
+        // Get API base URL - check multiple sources
+        let apiBaseUrl;
+        if (typeof API_BASE_URL !== 'undefined') {
+            apiBaseUrl = API_BASE_URL;
+        } else if (typeof getApiBaseUrl === 'function') {
+            apiBaseUrl = getApiBaseUrl();
+        } else {
+            // Fallback: detect from current location
+            const isLocal = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1' ||
+                           window.location.protocol === 'file:';
+            apiBaseUrl = isLocal ? 'http://localhost:3000' : window.location.origin;
+        }
+        
+        console.log('🔍 Searching for medicine:', medicineName);
+        console.log('🔍 Using API base URL:', apiBaseUrl);
+        
+        // Create a detailed prompt for medicine information
+        const medicinePrompt = `You are a medical information assistant. Provide comprehensive, accurate information about the medicine "${medicineName}".
+
+IMPORTANT: Organize the information in a clear, structured format with proper headings. Cover all of the following sections:
+
+1. **Generic Name and Brand Names**: List the generic name and common brand names
+2. **Uses/Indications**: What conditions or symptoms this medicine treats
+3. **Dosage Information**: Typical adult and pediatric dosages, frequency
+4. **How to Take**: Instructions (with/without food, time of day, etc.)
+5. **Side Effects**: Common and serious side effects
+6. **Warnings/Precautions**: Important safety information, special populations
+7. **Drug Interactions**: Medicines that should not be taken together
+8. **Contraindications**: Who should not take this medicine
+9. **Storage Instructions**: How to store the medicine
+10. **Additional Information**: Any other important notes
+
+Be thorough, accurate, and use clear medical terminology. Format with headings (use ### for section headings) and bullet points for lists. Provide complete and reliable information.`;
+
+        const response = await fetch(`${apiBaseUrl}/api/gemini/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: medicinePrompt })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error.message || data.error || 'Failed to get medicine information');
+        }
+        
+        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+            const medicineInfo = data.candidates[0].content.parts[0].text;
+            
+            console.log('✅ Medicine information retrieved successfully');
+            
+            // Display the information in a formatted way
+            displayMedicineInfo(medicineName, medicineInfo);
+        } else {
+            throw new Error('Unexpected response format from API');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error searching for medicine:', error);
+        content.innerHTML = `
+            <div class="medicine-search-error" style="padding: 2rem; text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+                <h3 style="color: #dc3545; margin-bottom: 0.5rem;">Error</h3>
+                <p style="color: #666; margin-bottom: 1rem;">Failed to retrieve medicine information. Please try again.</p>
+                <p style="font-size: 0.9rem; color: #999; margin-top: 1rem; background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                    <strong>Error details:</strong><br>${error.message}
+                </p>
+                <button class="btn-primary" onclick="searchMedicine()" style="margin-top: 1.5rem;">🔄 Retry Search</button>
+                <button class="btn-secondary" onclick="closeMedicineInfoModal()" style="margin-top: 0.5rem; margin-left: 0.5rem; background: #6c757d;">Close</button>
+            </div>
+        `;
+    }
+}
+
+// Display medicine information in a formatted way
+function displayMedicineInfo(medicineName, infoText) {
+    const content = document.getElementById('medicine-info-content');
+    
+    // Format the text - convert markdown-like formatting to HTML
+    let formattedText = infoText;
+    
+    // Format headings first (before other processing)
+    formattedText = formattedText.replace(/^###\s+(.+)$/gim, '<h3 style="color: #667eea; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.2rem; font-weight: 600;">$1</h3>');
+    formattedText = formattedText.replace(/^##\s+(.+)$/gim, '<h2 style="color: #667eea; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.3rem; font-weight: 600;">$1</h2>');
+    formattedText = formattedText.replace(/^#\s+(.+)$/gim, '<h1 style="color: #667eea; margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.5rem; font-weight: 600;">$1</h1>');
+    
+    // Format bold and italic
+    formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #333;">$1</strong>');
+    formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Split into paragraphs (double newlines)
+    const lines = formattedText.split('\n');
+    let result = '';
+    let currentParagraph = '';
+    let inList = false;
+    
+    lines.forEach((line, index) => {
+        line = line.trim();
+        if (!line) {
+            // Empty line - end current paragraph or list
+            if (currentParagraph) {
+                if (inList) {
+                    result += '</ul>';
+                    inList = false;
+                } else {
+                    result += `<p style="margin: 0.75rem 0; line-height: 1.6; color: #333;">${currentParagraph}</p>`;
+                }
+                currentParagraph = '';
+            }
+            return;
+        }
+        
+        // Check if line is a heading (already formatted)
+        if (line.startsWith('<h')) {
+            if (currentParagraph) {
+                if (inList) {
+                    result += '</ul>';
+                    inList = false;
+                } else {
+                    result += `<p style="margin: 0.75rem 0; line-height: 1.6; color: #333;">${currentParagraph}</p>`;
+                }
+                currentParagraph = '';
+            }
+            result += line;
+            return;
+        }
+        
+        // Check if line is a numbered list item
+        const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+        if (numberedMatch) {
+            if (currentParagraph && !inList) {
+                result += `<p style="margin: 0.75rem 0; line-height: 1.6; color: #333;">${currentParagraph}</p>`;
+                currentParagraph = '';
+            }
+            if (!inList) {
+                result += '<ul style="margin: 1rem 0; padding-left: 1.5rem;">';
+                inList = true;
+            }
+            result += `<li style="margin: 0.5rem 0; line-height: 1.6;"><strong>${numberedMatch[1]}.</strong> ${numberedMatch[2]}</li>`;
+            return;
+        }
+        
+        // Check if line is a bullet list item
+        const bulletMatch = line.match(/^[-•*]\s+(.+)$/);
+        if (bulletMatch) {
+            if (currentParagraph && !inList) {
+                result += `<p style="margin: 0.75rem 0; line-height: 1.6; color: #333;">${currentParagraph}</p>`;
+                currentParagraph = '';
+            }
+            if (!inList) {
+                result += '<ul style="margin: 1rem 0; padding-left: 1.5rem;">';
+                inList = true;
+            }
+            result += `<li style="margin: 0.5rem 0; line-height: 1.6;">${bulletMatch[1]}</li>`;
+            return;
+        }
+        
+        // Regular text line
+        if (inList) {
+            result += '</ul>';
+            inList = false;
+        }
+        
+        if (currentParagraph) {
+            currentParagraph += '<br>' + line;
+        } else {
+            currentParagraph = line;
+        }
+    });
+    
+    // Handle remaining paragraph
+    if (currentParagraph) {
+        if (inList) {
+            result += '</ul>';
+        } else {
+            result += `<p style="margin: 0.75rem 0; line-height: 1.6; color: #333;">${currentParagraph}</p>`;
+        }
+    } else if (inList) {
+        result += '</ul>';
+    }
+    
+    formattedText = result;
+    
+    content.innerHTML = `
+        <div class="medicine-info-display">
+            <div class="medicine-info-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 10px; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0; font-size: 1.5rem;">💊 ${medicineName}</h2>
+                <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 0.95rem;">Comprehensive Medicine Information</p>
+            </div>
+            <div class="medicine-info-content" style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; max-height: 60vh; overflow-y: auto; line-height: 1.6; color: #333;">
+                ${formattedText}
+            </div>
+            <div style="margin-top: 1.5rem; padding: 1rem; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                <p style="margin: 0; font-size: 0.9rem; color: #856404;">
+                    <strong>⚠️ Disclaimer:</strong> This information is for educational purposes only and should not replace professional medical advice. Always consult with a healthcare professional before taking any medication.
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+// Close medicine info modal
+function closeMedicineInfoModal() {
+    const modal = document.getElementById('medicine-info-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    // Clear the search input
+    const input = document.getElementById('medicine-search-input');
+    if (input) {
+        input.value = '';
     }
 }
 

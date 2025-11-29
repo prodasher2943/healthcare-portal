@@ -386,11 +386,66 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1.5rem;
 }
 
 .nav-brand h2 {
     color: #667eea;
     font-size: 1.5rem;
+    white-space: nowrap;
+}
+
+.nav-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.medicine-search-container {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 500px;
+}
+
+.medicine-search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 25px;
+    font-size: 0.95rem;
+    font-family: 'Poppins', sans-serif;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.medicine-search-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-search-medicine {
+    padding: 0.75rem 1.25rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.btn-search-medicine:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-search-medicine:active {
+    transform: translateY(0);
 }
 
 .btn-logout {
@@ -2782,5 +2837,105 @@ body {
     ::-webkit-scrollbar {
         width: 6px;
     }
+    
+    /* Medicine Search Bar Responsive */
+    .dashboard-nav {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .nav-brand {
+        flex: 0 0 auto;
+    }
+    
+    .nav-center {
+        order: 3;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        flex: 1 1 100%;
+    }
+    
+    .medicine-search-container {
+        max-width: 100%;
+    }
+    
+    .medicine-search-input {
+        font-size: 0.9rem;
+        padding: 0.7rem 0.875rem;
+    }
+    
+    .btn-search-medicine {
+        padding: 0.7rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .btn-logout {
+        flex: 0 0 auto;
+        width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-nav {
+        padding: 1rem;
+    }
+    
+    .nav-brand h2 {
+        font-size: 1.1rem;
+    }
+    
+    .medicine-search-input {
+        font-size: 0.85rem;
+        padding: 0.65rem 0.75rem;
+    }
+    
+    .btn-search-medicine {
+        padding: 0.65rem 0.875rem;
+        font-size: 0.85rem;
+    }
+    
+    .medicine-info-content {
+        max-height: 50vh !important;
+        padding: 1rem !important;
+    }
+    
+    .medicine-info-header h2 {
+        font-size: 1.2rem !important;
+    }
+}
+
+/* Medicine Info Modal Styles */
+.medicine-info-display {
+    animation: fadeIn 0.3s ease;
+}
+
+.medicine-info-content {
+    text-align: left;
+}
+
+.medicine-info-content h1,
+.medicine-info-content h2,
+.medicine-info-content h3 {
+    font-family: 'Poppins', sans-serif;
+}
+
+.medicine-info-content ul {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+}
+
+.medicine-info-content li {
+    margin: 0.5rem 0;
+    line-height: 1.6;
+}
+
+.medicine-search-loading {
+    padding: 2rem;
+}
+
+.medicine-search-error {
+    padding: 2rem;
+    text-align: center;
 }
 
