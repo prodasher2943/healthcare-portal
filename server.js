@@ -32,6 +32,11 @@ app.use(express.static(__dirname, {
     extensions: ['html', 'js', 'css', 'json', 'png', 'jpg', 'jpeg', 'gif', 'svg']
 }));
 
+// Gemini API Configuration (server-side only - never expose to client)
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
 // In-memory storage (replace with database in production)
 let usersDB = {};
 let consultations = [];
@@ -404,12 +409,150 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Gemini API Endpoints (server-side proxy to keep API key secure)
+
+// Chat endpoint
+app.post('/api/gemini/chat', async (req, res) => {
+    if (!GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'Gemini API key not configured. Please set GEMINI_API_KEY environment variable.' });
+    }
+    
+    try {
+        const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ error: 'Prompt is required' });
+        }
+        
+        const requestPayload = {
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }]
+        };
+        
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestPayload)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Gemini API error:', errorData);
+            return res.status(response.status).json({ error: 'Failed to get response from Gemini API' });
+        }
+        
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        res.status(500).json({ error: 'Internal server error while calling Gemini API' });
+    }
+});
+
+// Generate title endpoint
+app.post('/api/gemini/title', async (req, res) => {
+    if (!GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'Gemini API key not configured' });
+    }
+    
+    try {
+        const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ error: 'Prompt is required' });
+        }
+        
+        const requestPayload = {
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }]
+        };
+        
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestPayload)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Gemini API error:', errorData);
+            return res.status(response.status).json({ error: 'Failed to generate title' });
+        }
+        
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        res.status(500).json({ error: 'Internal server error while calling Gemini API' });
+    }
+});
+
+// Generate summary endpoint
+app.post('/api/gemini/summary', async (req, res) => {
+    if (!GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'Gemini API key not configured' });
+    }
+    
+    try {
+        const { prompt } = req.body;
+        if (!prompt) {
+            return res.status(400).json({ error: 'Prompt is required' });
+        }
+        
+        const requestPayload = {
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }]
+        };
+        
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestPayload)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('Gemini API error:', errorData);
+            return res.status(response.status).json({ error: 'Failed to generate summary' });
+        }
+        
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        res.status(500).json({ error: 'Internal server error while calling Gemini API' });
+    }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Healthcare Portal Server running on port ${PORT}`);
     console.log(`📡 Socket.io server ready for real-time connections`);
     console.log(`🌐 Accessible at: http://localhost:${PORT}`);
+    
+    // Check if Gemini API key is configured
+    if (!GEMINI_API_KEY) {
+        console.warn('⚠️  WARNING: GEMINI_API_KEY environment variable not set. Gemini AI features will not work.');
+        console.warn('   Set it using: export GEMINI_API_KEY=your_key_here');
+        console.warn('   Or add it to Railway/Render environment variables.');
+    } else {
+        console.log('✅ Gemini API key configured');
+    }
+    
     if (process.env.RAILWAY_PUBLIC_DOMAIN) {
         console.log(`🌍 Public URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
     }

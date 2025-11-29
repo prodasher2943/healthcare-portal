@@ -294,14 +294,7 @@ async function sendMessage() {
     const typingId = showTypingIndicator();
 
     try {
-        // Check if API key is configured
-        if (typeof CONFIG === 'undefined' || CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY' || !CONFIG.GEMINI_API_KEY) {
-            removeTypingIndicator(typingId);
-            addMessageToChat('⚠️ Gemini API key is not configured. Please add your API key in config.js file. You can get one from https://makersuite.google.com/app/apikey', 'bot');
-            return;
-        }
-
-        // Use REST API
+        // Call server endpoint (API key is server-side only - secure)
         await sendMessageWithREST(message, typingId);
         
     } catch (error) {
@@ -345,24 +338,15 @@ Current question: ${message}${conversationContext}
 Please provide a helpful, concise medical response:`;
     
     // Build the request payload
-    const requestPayload = {
-        contents: [{
-            parts: [{
-                text: fullPrompt
-            }]
-        }]
-    };
+    // Call Gemini API via server endpoint (secure - API key not exposed)
+    console.log('Calling Gemini API via server endpoint');
     
-    // Call Gemini API
-    const apiUrl = CONFIG.GEMINI_API_URL();
-    console.log('Calling Gemini API (REST)');
-    
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/gemini/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestPayload)
+        body: JSON.stringify({ prompt: fullPrompt })
     });
 
         // Check response status
@@ -378,7 +362,7 @@ Please provide a helpful, concise medical response:`;
                 return;
             } else if (response.status === 401 || response.status === 403) {
                 removeTypingIndicator(typingId);
-                errorMessage += 'Authentication failed. Please check your API key in config.js. Make sure it\'s valid.';
+                errorMessage += 'Authentication failed. Please check that the GEMINI_API_KEY environment variable is set on the server.';
                 addMessageToChat(errorMessage, 'bot');
                 return;
             } else if (response.status === 429) {
@@ -505,27 +489,14 @@ ${conversationText}
 
 Title:`;
         
-        if (typeof CONFIG === 'undefined' || !CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-            console.log('Cannot generate title: API key not configured');
-            return;
-        }
+        console.log('Generating chat title via server endpoint...');
         
-        console.log('Generating chat title...');
-        
-        const requestPayload = {
-            contents: [{
-                parts: [{
-                    text: titlePrompt
-                }]
-            }]
-        };
-        
-        const response = await fetch(CONFIG.GEMINI_API_URL(), {
+        const response = await fetch(`${API_BASE_URL}/api/gemini/title`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestPayload)
+            body: JSON.stringify({ prompt: titlePrompt })
         });
         
         if (response.ok) {
@@ -556,8 +527,11 @@ Title:`;
                 console.error('Unexpected response format for title generation:', data);
             }
         } else {
-            const errorText = await response.text();
-            console.error('Failed to generate title. Response:', response.status, errorText);
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Failed to generate title. Response:', response.status, errorData);
+            if (response.status === 500 && errorData.error && errorData.error.includes('not configured')) {
+                console.warn('Gemini API key not configured on server');
+            }
         }
     } catch (error) {
         console.error('Error generating chat title:', error);
@@ -1012,26 +986,12 @@ ${conversationText}
 
 Summary:`;
         
-        if (typeof CONFIG === 'undefined' || !CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-            // Fallback if no API key
-            const userMessages = currentChat.messages.filter(m => m.role === 'user');
-            return userMessages.map(m => m.text).join('\n\n') || 'No chat history available.';
-        }
-        
-        const requestPayload = {
-            contents: [{
-                parts: [{
-                    text: summaryPrompt
-                }]
-            }]
-        };
-        
-        const response = await fetch(CONFIG.GEMINI_API_URL(), {
+        const response = await fetch(`${API_BASE_URL}/api/gemini/summary`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestPayload)
+            body: JSON.stringify({ prompt: summaryPrompt })
         });
         
         if (response.ok) {
@@ -1039,6 +999,12 @@ Summary:`;
             if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                 let summary = data.candidates[0].content.parts[0].text.trim();
                 return summary || 'Unable to generate summary.';
+            }
+        } else {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Failed to generate summary. Response:', response.status, errorData);
+            if (response.status === 500 && errorData.error && errorData.error.includes('not configured')) {
+                console.warn('Gemini API key not configured on server');
             }
         }
         

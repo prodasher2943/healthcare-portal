@@ -1,19 +1,24 @@
 // Gemini API Configuration
+// ⚠️ SECURITY: API key is now stored server-side only (in environment variables)
+// 
+// To configure the API key:
+// 1. Set the GEMINI_API_KEY environment variable on your server
+// 2. For local development: export GEMINI_API_KEY=your_key_here
+// 3. For Railway/Render: Add it in the environment variables section
+//
 // Get your API key from: https://makersuite.google.com/app/apikey
-// Replace 'YOUR_GEMINI_API_KEY' with your actual API key
+//
+// The API key is no longer stored in this file for security reasons.
+// All Gemini API calls are now proxied through server endpoints:
+// - /api/gemini/chat
+// - /api/gemini/title
+// - /api/gemini/summary
 
 const CONFIG = {
-    GEMINI_API_KEY: 'AIzaSyBLWqHFr5cPjBDOCAOJY9IfrLRJEianuKg', // Replace with your Gemini API key
-    // Working model - gemini-2.5-pro confirmed working with your API key!
-    GEMINI_MODEL: 'gemini-2.5-pro', // ✅ Tested and working!
-    GEMINI_API_URL: function() {
-        // Using v1beta API endpoint
-        return `https://generativelanguage.googleapis.com/v1beta/models/${this.GEMINI_MODEL}:generateContent?key=${this.GEMINI_API_KEY}`;
-    }
+    // Model can still be configured via environment variable GEMINI_MODEL on server
+    // Default is 'gemini-2.5-pro'
+    GEMINI_MODEL: 'gemini-2.5-pro'
 };
 
-// Check if API key is set
-if (CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-    console.warn('⚠️ Please set your Gemini API key in config.js');
-}
-
+// Note: This file is kept for backward compatibility but the API key
+// should never be stored here. It must be set as an environment variable.
