@@ -126,26 +126,73 @@ app.put('/api/consultations/:id', (req, res) => {
 // Video call management
 app.post('/api/calls/start', (req, res) => {
     const { consultationId } = req.body;
-    const callId = `call_${Date.now()}`;
+    
+    // Use consultationId as callId for easier matching
+    // If consultation already has an active call, reuse it
+    let callId = null;
+    for (const [existingCallId, call] of Object.entries(activeCalls)) {
+        if (call.consultationId === consultationId && !call.ended) {
+            callId = existingCallId;
+            break;
+        }
+    }
+    
+    // Create new call if none exists
+    if (!callId) {
+        callId = `call_${consultationId}_${Date.now()}`;
+    }
     
     activeCalls[callId] = {
-        consultationId,
+        consultationId: parseInt(consultationId) || consultationId,
         startTime: new Date().toISOString(),
         ended: false
     };
     
-    res.json({ success: true, callId });
+    res.json({ success: true, callId, consultationId: parseInt(consultationId) || consultationId });
 });
 
 app.post('/api/calls/end', (req, res) => {
     const { callId } = req.body;
     
-    if (activeCalls[callId]) {
-        activeCalls[callId].ended = true;
-        activeCalls[callId].endTime = new Date().toISOString();
+    console.log('📞 Call end requested for callId:', callId);
+    
+    // Find call by callId or consultationId
+    let callToEnd = activeCalls[callId];
+    let callIdToNotify = callId;
+    
+    // If not found by callId, search by consultationId
+    if (!callToEnd) {
+        for (const [existingCallId, existingCall] of Object.entries(activeCalls)) {
+            if (existingCall.consultationId === parseInt(callId) || 
+                existingCall.consultationId === callId ||
+                existingCallId.includes(callId) ||
+                callId.includes(existingCall.consultationId)) {
+                callToEnd = existingCall;
+                callIdToNotify = existingCallId;
+                break;
+            }
+        }
+    }
+    
+    if (callToEnd) {
+        callToEnd.ended = true;
+        callToEnd.endTime = new Date().toISOString();
         
-        // Notify both parties
-        io.emit('callEnded', { callId });
+        // Notify both parties via Socket.io - send both callId and consultationId for matching
+        console.log('📢 Broadcasting callEnded event to all clients');
+        io.emit('callEnded', { 
+            callId: callIdToNotify,
+            consultationId: callToEnd.consultationId
+        });
+        
+        // Also remove from active calls after a delay to allow polling to catch it
+        setTimeout(() => {
+            delete activeCalls[callIdToNotify];
+        }, 5000);
+    } else {
+        console.log('⚠️ Call not found in activeCalls for:', callId);
+        // Still notify in case client is using this callId
+        io.emit('callEnded', { callId: callId, consultationId: parseInt(callId) || callId });
     }
     
     res.json({ success: true });
@@ -153,7 +200,21 @@ app.post('/api/calls/end', (req, res) => {
 
 app.get('/api/calls/:callId', (req, res) => {
     const { callId } = req.params;
-    res.json(activeCalls[callId] || { ended: false });
+    
+    // Check by callId first
+    let call = activeCalls[callId];
+    
+    // If not found, check by consultationId
+    if (!call) {
+        for (const [existingCallId, existingCall] of Object.entries(activeCalls)) {
+            if (existingCall.consultationId === parseInt(callId) || existingCall.consultationId === callId) {
+                call = existingCall;
+                break;
+            }
+        }
+    }
+    
+    res.json(call || { ended: false });
 });
 
 // Get online doctors
@@ -226,6 +287,25 @@ io.on('connection', (socket) => {
         }
         
         socket.emit('consultationsUpdated', filteredConsultations);
+    });
+    
+    // Real-time prescription updates
+    socket.on('prescriptionUpdate', ({ callId, prescription, consultationId }) => {
+        // Store prescription in active call
+        if (activeCalls[callId]) {
+            activeCalls[callId].prescription = prescription;
+            activeCalls[callId].prescriptionUpdatedAt = new Date().toISOString();
+        }
+        
+        // Also store in consultation for persistence
+        const consultation = consultations.find(c => c.id === parseInt(consultationId));
+        if (consultation) {
+            consultation.prescription = prescription;
+            consultation.prescriptionUpdatedAt = new Date().toISOString();
+        }
+        
+        // Broadcast to all connected clients in this call
+        io.emit('prescriptionUpdated', { callId, consultationId, prescription });
     });
 });
 

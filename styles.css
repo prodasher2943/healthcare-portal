@@ -1422,24 +1422,38 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: #1a1a1a;
+    background: #0a0a0a;
     z-index: 2000;
     display: flex;
     flex-direction: column;
 }
 
 .video-call-header {
-    background: rgba(0, 0, 0, 0.8);
-    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.95);
+    padding: 1rem 1.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.video-call-header h2 {
-    margin: 0;
-    color: white;
+.call-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.call-timer {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #4caf50;
+    font-family: 'Courier New', monospace;
+}
+
+.call-participant-name {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .btn-end-call {
@@ -1451,39 +1465,309 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
+    font-size: 1rem;
 }
 
 .btn-end-call:hover {
     background: #c82333;
+    transform: scale(1.05);
 }
 
 .video-call-content {
     flex: 1;
     display: flex;
+    padding: 1rem;
+    overflow: hidden;
+}
+
+.video-call-main {
+    flex: 1;
+    display: flex;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+.video-container-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.video-box-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+}
+
+.video-box {
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.remote-video {
+    flex: 1;
+    width: 100%;
+    min-height: 400px;
+    position: relative;
+}
+
+.local-video {
+    width: 300px;
+    height: 225px;
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.video-box video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+}
+
+.video-placeholder-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
-}
-
-#call-participant-info {
+    background: rgba(0, 0, 0, 0.7);
     color: white;
-    text-align: center;
-    margin-bottom: 2rem;
+    z-index: 2;
 }
 
-.video-placeholder {
+.video-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    padding: 3rem;
-    text-align: center;
-    color: white;
-    max-width: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    border: 3px solid rgba(255, 255, 255, 0.2);
 }
 
-.video-placeholder p {
-    margin: 1rem 0;
+.video-placeholder-content p {
     font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.video-controls-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 3;
+}
+
+.video-label {
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.video-status-indicator {
+    color: #4caf50;
+    font-size: 0.8rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Video Call Sidebar */
+.video-call-sidebar {
+    width: 350px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+}
+
+.call-info-panel {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: white;
+}
+
+.call-info-panel h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+#call-participant-details {
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+#call-participant-details p {
+    margin: 0.5rem 0;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+#call-participant-details strong {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* Prescription Panel */
+.prescription-panel {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 300px;
+}
+
+.prescription-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.prescription-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.prescription-textarea {
+    width: 100%;
+    flex: 1;
+    min-height: 300px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    color: white;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    font-family: 'Poppins', sans-serif;
+    resize: vertical;
+}
+
+.prescription-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.prescription-textarea:read-only {
+    background: rgba(0, 0, 0, 0.2);
+    cursor: default;
+}
+
+.prescription-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.btn-clear-prescription,
+.btn-send-prescription,
+.btn-save-prescription {
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.btn-clear-prescription {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.btn-clear-prescription:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-send-prescription,
+.btn-save-prescription {
+    background: #4caf50;
+    color: white;
+    flex: 1;
+}
+
+.btn-send-prescription:hover,
+.btn-save-prescription:hover {
+    background: #45a049;
+}
+
+.prescription-notice {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+/* Responsive video call interface */
+@media (max-width: 768px) {
+    .video-call-main {
+        flex-direction: column;
+    }
+    
+    .video-call-sidebar {
+        width: 100%;
+        max-height: 40vh;
+    }
+    
+    .local-video {
+        width: 200px;
+        height: 150px;
+        bottom: 0.5rem;
+        right: 0.5rem;
+    }
+    
+    .remote-video {
+        min-height: 300px;
+    }
+    
+    .prescription-textarea {
+        min-height: 200px;
+    }
+}
+
+/* Hide video placeholder when video stream is active */
+.video-box video:not([src=""]) + .video-placeholder-content {
+    display: none;
+}
+
+.video-box[data-video-active="true"] .video-placeholder-content {
+    display: none;
 }
 
 .call-summary {

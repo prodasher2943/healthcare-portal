@@ -100,9 +100,75 @@ function initSocket() {
     });
     
     // Listen for call ended
-    socket.on('callEnded', ({ callId }) => {
-        if (currentCallId === callId) {
-            endVideoCall();
+    socket.on('callEnded', ({ callId, consultationId }) => {
+        console.log('📞 Received callEnded event:', { callId, consultationId });
+        // Check if this call matches our current call
+        // Match by callId, consultationId, or if IDs contain each other
+        if (typeof currentCallId !== 'undefined' && currentCallId) {
+            let shouldEnd = false;
+            
+            // Exact match by callId
+            if (currentCallId === callId) {
+                shouldEnd = true;
+            }
+            
+            // Match by consultationId
+            if (consultationId && typeof currentConsultation !== 'undefined' && currentConsultation) {
+                if (currentConsultation.id === consultationId || 
+                    currentCallId === consultationId ||
+                    String(currentConsultation.id) === String(consultationId)) {
+                    shouldEnd = true;
+                }
+            }
+            
+            // String contains match (for IDs like "call_123_456")
+            if (!shouldEnd && typeof callId === 'string' && typeof currentCallId === 'string') {
+                if (callId.includes(String(currentCallId)) || 
+                    String(currentCallId).includes(callId)) {
+                    shouldEnd = true;
+                }
+            }
+            
+            if (shouldEnd) {
+                console.log('✅ Ending video call due to remote party ending the call');
+                // Use setTimeout to ensure this runs after any current operations
+                setTimeout(() => {
+                    if (typeof endVideoCall === 'function') {
+                        endVideoCall();
+                    }
+                }, 100);
+            }
+        }
+    });
+    
+    // Listen for prescription updates
+    socket.on('prescriptionUpdated', ({ callId, consultationId, prescription }) => {
+        console.log('📝 Prescription updated:', { callId, consultationId, prescriptionLength: prescription?.length || 0 });
+        
+        // Only update if this is for our current call
+        // Match by callId, consultationId, or if they contain each other
+        const isOurCall = (typeof currentCallId !== 'undefined' && currentCallId && 
+                           (currentCallId === callId || 
+                            currentCallId === consultationId ||
+                            (typeof currentCallId === 'string' && currentCallId.includes(String(consultationId))) ||
+                            (typeof callId === 'string' && callId.includes(String(currentCallId))))) ||
+                          (typeof currentConsultation !== 'undefined' && currentConsultation &&
+                           currentConsultation.id === consultationId);
+                           
+        if (isOurCall) {
+            const prescriptionTextarea = document.getElementById('prescription-textarea');
+            if (prescriptionTextarea) {
+                // Don't update if doctor is currently typing (to avoid cursor jumping)
+                if (prescriptionTextarea !== document.activeElement) {
+                    prescriptionTextarea.value = prescription || '';
+                    
+                    // Show/hide notice for patient
+                    const prescriptionNotice = document.getElementById('prescription-readonly-notice');
+                    if (prescriptionNotice) {
+                        prescriptionNotice.style.display = prescription ? 'none' : 'block';
+                    }
+                }
+            }
         }
     });
     
@@ -294,10 +360,10 @@ async function startCall(consultationId) {
             method: 'POST',
             body: JSON.stringify({ consultationId })
         });
-        return result.callId;
+        return result.callId || result; // Return callId or full result
     } catch (error) {
-        // Fallback
-        return `call_${Date.now()}`;
+        // Fallback - return consultationId so both parties can match
+        throw error; // Let caller handle fallback
     }
 }
 

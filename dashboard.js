@@ -333,9 +333,9 @@ async function sendMessageWithREST(message, typingId) {
     }
     
     // Prepare the complete prompt - asking for concise responses
-    const fullPrompt = `You are an AI medical assistant. Provide helpful medical guidance, diagnosis suggestions, treatment recommendations, and medication information. Be professional, empathetic, and always remind users to consult real doctors for serious conditions.
+    const fullPrompt = `You are an AI medical assistant. Provide helpful medical guidance, diagnosis suggestions, treatment recommendations, and medication information. Be professional, empathetic, and remind users to consult real doctors for serious conditions, not always, just when the problem is serious.
 
-IMPORTANT: Keep your responses CONCISE and to the point. Aim for 2-4 sentences maximum unless more detail is absolutely necessary. Be clear and direct.
+IMPORTANT: Keep your responses CONCISE and to the point. Aim for 2-6 sentences maximum unless more detail is absolutely necessary. Be clear and direct. Provide treatment advice like a real doctor would.
 
 Current question: ${message}${conversationContext}
 
@@ -454,13 +454,7 @@ Please provide a helpful, concise medical response:`;
         const aiResponse = data.candidates[0].content.parts[0].text;
         addMessageToChat(aiResponse, 'bot');
         
-        // Generate or update chat title if this is one of the first few messages
-        if (currentChatId && chats[currentChatId]) {
-            const currentChat = chats[currentChatId];
-            if (currentChat.messages.length <= 3 && currentChat.title === 'New Chat') {
-                generateChatTitle(currentChat);
-            }
-        }
+        // Title generation is now handled in addMessageToChat after saveChats()
         
         // Check if diagnosis seems complete
         if (aiResponse.toLowerCase().includes('diagnosis') || 
@@ -477,14 +471,31 @@ Please provide a helpful, concise medical response:`;
 
 // Generate chat title using Gemini AI
 async function generateChatTitle(chat) {
-    if (!chat || !chat.messages || chat.messages.length === 0) return;
+    if (!chat || !chat.messages || chat.messages.length < 2) {
+        console.log('Cannot generate title: chat has less than 2 messages');
+        return;
+    }
+    
+    // Don't regenerate if title already exists and is not "New Chat"
+    if (chat.title && chat.title !== 'New Chat') {
+        console.log('Title already exists:', chat.title);
+        return;
+    }
     
     try {
-        // Get first few messages to generate title
-        const firstMessages = chat.messages.slice(0, 5);
-        const conversationText = firstMessages.map(m => `${m.role === 'user' ? 'Patient' : 'AI'}: ${m.text}`).join('\n');
+        // Get first few messages to generate title (filter out welcome message)
+        const userMessages = chat.messages.filter(m => m.role === 'user').slice(0, 3);
+        if (userMessages.length === 0) {
+            console.log('No user messages found for title generation');
+            return;
+        }
         
-        const titlePrompt = `Based on this medical conversation, generate a short, descriptive title (maximum 5-6 words) that summarizes the main health concern or topic. Only return the title, nothing else.
+        const conversationText = chat.messages.slice(0, 6)
+            .filter(m => m.role === 'user' || m.role === 'bot')
+            .map(m => `${m.role === 'user' ? 'Patient' : 'AI'}: ${m.text.substring(0, 200)}`) // Limit text length
+            .join('\n');
+        
+        const titlePrompt = `Based on this medical conversation, generate a short, descriptive title (maximum 5-6 words) that summarizes the main health concern or topic. Only return the title, nothing else. Do not include quotes.
 
 Conversation:
 ${conversationText}
@@ -492,8 +503,11 @@ ${conversationText}
 Title:`;
         
         if (typeof CONFIG === 'undefined' || !CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-            return; // Can't generate title without API key
+            console.log('Cannot generate title: API key not configured');
+            return;
         }
+        
+        console.log('Generating chat title...');
         
         const requestPayload = {
             contents: [{
@@ -515,18 +529,32 @@ Title:`;
             const data = await response.json();
             if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                 let title = data.candidates[0].content.parts[0].text.trim();
-                // Clean up title (remove quotes, extra whitespace)
-                title = title.replace(/^["']|["']$/g, '').trim();
+                // Clean up title (remove quotes, extra whitespace, newlines)
+                title = title.replace(/^["']|["']$/g, '').replace(/\n/g, ' ').trim();
+                // Extract just the title (sometimes AI adds "Title:" prefix)
+                if (title.toLowerCase().includes('title:')) {
+                    title = title.split(/title:/i)[1].trim();
+                }
                 if (title.length > 50) {
                     title = title.substring(0, 47) + '...';
                 }
-                if (title) {
-                    chat.title = title;
-                    updateChatTitle(title);
-                    saveChats();
-                    loadChatList();
+                if (title && title !== 'New Chat') {
+                    // Update the chat object directly
+                    const chatId = chat.id || currentChatId;
+                    if (chatId && chats[chatId]) {
+                        chats[chatId].title = title;
+                        updateChatTitle(title);
+                        saveChats();
+                        loadChatList();
+                        console.log('✅ Chat title generated:', title);
+                    }
                 }
+            } else {
+                console.error('Unexpected response format for title generation:', data);
             }
+        } else {
+            const errorText = await response.text();
+            console.error('Failed to generate title. Response:', response.status, errorText);
         }
     } catch (error) {
         console.error('Error generating chat title:', error);
@@ -575,6 +603,18 @@ function addMessageToChat(text, role, saveToHistory = true) {
         currentChat.messages.push({ role, text, timestamp: timestampISO });
         currentChat.updatedAt = timestampISO;
         saveChats();
+        
+        // Trigger title generation if needed (after saving)
+        // Use setTimeout to ensure chat object is fully updated
+        setTimeout(() => {
+            const updatedChat = chats[currentChatId];
+            if (updatedChat && updatedChat.messages && 
+                updatedChat.messages.length >= 2 && 
+                updatedChat.messages.length <= 6 && 
+                updatedChat.title === 'New Chat') {
+                generateChatTitle(updatedChat);
+            }
+        }, 1000);
     }
 }
 
@@ -1556,86 +1596,150 @@ async function rejectConsultation(requestId) {
 
 let currentCallId = null;
 let callEndPollInterval = null;
+let callTimerInterval = null;
+let callStartTime = null;
+let currentConsultation = null;
 
 async function startVideoCall(consultation) {
     // Stop polling when call starts
     stopConsultationStatusPolling();
     stopDoctorRequestPolling();
     
+    // Store consultation for later use
+    currentConsultation = consultation;
+    
     // Set current call ID for synchronization
-    currentCallId = consultation.id;
+    let callIdToUse = consultation.id;
     
     // Mark call as active via API (with localStorage fallback)
     try {
-        const callId = await startCall(consultation.id);
-        currentCallId = callId;
-    } catch (error) {
-        // Fallback to localStorage
+        const result = await startCall(consultation.id);
+        // Server returns { callId, consultationId }
+        callIdToUse = result.callId || result;
+        currentCallId = callIdToUse;
+        
+        // Also store in localStorage for fallback
         const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
-        currentCallId = `call_${Date.now()}`;
         activeCalls[currentCallId] = {
             consultationId: consultation.id,
             startTime: new Date().toISOString(),
             ended: false
         };
         localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+    } catch (error) {
+        console.log('Failed to start call via API, using localStorage:', error);
+        // Fallback to localStorage
+        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+        currentCallId = `call_${consultation.id}_${Date.now()}`;
+        activeCalls[currentCallId] = {
+            consultationId: consultation.id,
+            startTime: new Date().toISOString(),
+            ended: false
+        };
+        localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+        callIdToUse = currentCallId;
     }
     
+    // Hide dashboards and show video call screen
     document.getElementById('patient-dashboard').style.display = 'none';
     document.getElementById('doctor-dashboard').style.display = 'none';
-    document.getElementById('video-call-screen').style.display = 'block';
+    document.getElementById('video-call-screen').style.display = 'flex';
     
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
-    const users = JSON.parse(localStorage.getItem('usersDB') || '{}');
-    const isDoctor = userData.user_type === 'Doctor';
+    const users = await getAllUsers();
+    const isDoctor = userData && (userData.user_type === 'Doctor' || userData.user_type?.toLowerCase() === 'doctor');
     
-    const callDetails = document.getElementById('call-details');
-    const participantInfo = document.getElementById('call-participant-info');
+    // Set up participant info in header
+    const participantNameEl = document.getElementById('call-participant-name');
+    if (isDoctor) {
+        participantNameEl.textContent = `Patient: ${consultation.patientName || 'Unknown'}`;
+        document.getElementById('remote-video-label').textContent = consultation.patientName || 'Patient';
+        document.getElementById('remote-video-name-label').textContent = consultation.patientName || 'Patient';
+    } else {
+        const doctor = users[consultation.doctorEmail];
+        const doctorName = (doctor && doctor.user_data && doctor.user_data.name) ? doctor.user_data.name : 'Unknown Doctor';
+        participantNameEl.textContent = `Dr. ${doctorName}`;
+        document.getElementById('remote-video-label').textContent = `Dr. ${doctorName}`;
+        document.getElementById('remote-video-name-label').textContent = `Dr. ${doctorName}`;
+    }
+    
+    // Set up participant details panel
+    const participantDetailsEl = document.getElementById('call-participant-details');
+    const callInfoTitleEl = document.getElementById('call-info-title');
     
     if (isDoctor) {
-        // Doctor's view - show patient info
-        participantInfo.innerHTML = `
-            <h2>Consultation with Patient</h2>
-            <p><strong>Patient Name:</strong> ${consultation.patientName}</p>
-            <p><strong>Contact:</strong> ${consultation.patientContact}</p>
-        `;
-        callDetails.innerHTML = `
-            <div class="call-info-section">
-                <h3>📋 Patient Information</h3>
-                <p><strong>Name:</strong> ${consultation.patientName}</p>
-                <p><strong>Contact:</strong> ${consultation.patientContact}</p>
-                <p><strong>Bio Data:</strong> ${consultation.patientBioData || 'N/A'}</p>
-            </div>
-            <div class="call-info-section">
-                <h3>💬 Chat Summary</h3>
-                <div class="call-summary">${formatMessage(consultation.chatSummary || 'No summary available.')}</div>
+        callInfoTitleEl.textContent = '👤 Patient Information';
+        participantDetailsEl.innerHTML = `
+            <p><strong>Name:</strong> ${consultation.patientName || 'N/A'}</p>
+            <p><strong>Contact:</strong> ${consultation.patientContact || 'N/A'}</p>
+            <p><strong>Bio Data:</strong> ${consultation.patientBioData || 'N/A'}</p>
+            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">💬 Chat Summary</h4>
+                <div class="call-summary" style="max-height: 150px; overflow-y: auto;">${formatMessage(consultation.chatSummary || 'No summary available.')}</div>
             </div>
         `;
     } else {
-        // Patient's view - show doctor info
         const doctor = users[consultation.doctorEmail];
-        if (doctor) {
-            participantInfo.innerHTML = `
-                <h2>Consultation with Doctor</h2>
-                <p><strong>Doctor Name:</strong> Dr. ${doctor.user_data.name}</p>
-                <p><strong>Specialization:</strong> ${doctor.user_data.specialization || 'N/A'}</p>
+        callInfoTitleEl.textContent = '👨‍⚕️ Doctor Information';
+        if (doctor && doctor.user_data) {
+            const doctorName = doctor.user_data.name || 'Unknown Doctor';
+            const specialization = doctor.user_data.specialization || 'N/A';
+            const contact = doctor.user_data.contact || 'N/A';
+            const experience = doctor.user_data.experience || 0;
+            const bio = doctor.user_data.bio || 'N/A';
+            
+            participantDetailsEl.innerHTML = `
+                <p><strong>Name:</strong> Dr. ${doctorName}</p>
+                <p><strong>Specialization:</strong> ${specialization}</p>
+                <p><strong>Contact:</strong> ${contact}</p>
+                <p><strong>Experience:</strong> ${experience} years</p>
+                <p><strong>Bio:</strong> ${bio}</p>
             `;
-            callDetails.innerHTML = `
-                <div class="call-info-section">
-                    <h3>👨‍⚕️ Doctor Information</h3>
-                    <p><strong>Name:</strong> Dr. ${doctor.user_data.name}</p>
-                    <p><strong>Specialization:</strong> ${doctor.user_data.specialization || 'N/A'}</p>
-                    <p><strong>Contact:</strong> ${doctor.user_data.contact || 'N/A'}</p>
-                    <p><strong>Experience:</strong> ${doctor.user_data.experience || 0} years</p>
-                    <p><strong>Bio:</strong> ${doctor.user_data.bio || 'N/A'}</p>
-                </div>
-                <div class="call-info-section">
-                    <h3>💬 Consultation Summary</h3>
-                    <div class="call-summary">${formatMessage(consultation.chatSummary || 'No summary available.')}</div>
-                </div>
-            `;
+        } else {
+            participantDetailsEl.innerHTML = `<p>Doctor information not available.</p>`;
         }
     }
+    
+    // Set up prescription panel
+    const prescriptionTextarea = document.getElementById('prescription-textarea');
+    const prescriptionActions = document.getElementById('prescription-actions');
+    const prescriptionNotice = document.getElementById('prescription-readonly-notice');
+    
+    if (isDoctor) {
+        // Doctor can edit prescription
+        prescriptionTextarea.removeAttribute('readonly');
+        prescriptionTextarea.placeholder = 'Write prescription here... (Updates in real-time for patient)';
+        prescriptionActions.style.display = 'flex';
+        prescriptionNotice.style.display = 'none';
+        
+        // Load existing prescription if any
+        if (consultation.prescription) {
+            prescriptionTextarea.value = consultation.prescription;
+        } else {
+            prescriptionTextarea.value = '';
+        }
+    } else {
+        // Patient can only view prescription
+        prescriptionTextarea.setAttribute('readonly', 'true');
+        prescriptionTextarea.placeholder = 'Prescription will appear here when the doctor writes it...';
+        prescriptionActions.style.display = 'none';
+        
+        // Load existing prescription if any
+        if (consultation.prescription) {
+            prescriptionTextarea.value = consultation.prescription;
+            prescriptionNotice.style.display = 'none';
+        } else {
+            prescriptionTextarea.value = '';
+            prescriptionNotice.style.display = 'block';
+        }
+    }
+    
+    // Initialize video streams (placeholder for now - WebRTC can be added later)
+    initializeVideoStreams();
+    
+    // Start call timer
+    callStartTime = new Date();
+    startCallTimer();
     
     // Start polling for call end signal
     startCallEndPolling();
@@ -1653,11 +1757,24 @@ function startCallEndPolling() {
         
         // Check API first (for global synchronization)
         try {
-            const callStatus = await getCallStatus(currentCallId);
-            if (callStatus && callStatus.ended) {
-                // Call was ended by other party via API
-                endVideoCall();
-                return;
+            // Try both callId and consultation ID
+            const checkIds = [currentCallId];
+            if (currentConsultation && currentConsultation.id) {
+                checkIds.push(currentConsultation.id);
+            }
+            
+            for (const checkId of checkIds) {
+                try {
+                    const callStatus = await getCallStatus(checkId);
+                    if (callStatus && callStatus.ended) {
+                        // Call was ended by other party via API
+                        console.log('Call ended detected via API polling for:', checkId);
+                        endVideoCall();
+                        return;
+                    }
+                } catch (err) {
+                    // Try next ID
+                }
             }
         } catch (error) {
             // Fallback to localStorage if API fails
@@ -1665,12 +1782,19 @@ function startCallEndPolling() {
         }
         
         // Also check localStorage as fallback
-        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
-        const call = activeCalls[currentCallId];
-        
-        if (call && call.ended) {
-            // Call was ended by other party
-            endVideoCall();
+        try {
+            const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+            // Check by callId or consultation ID
+            const call = activeCalls[currentCallId] || 
+                        (currentConsultation && activeCalls[currentConsultation.id]);
+            
+            if (call && call.ended) {
+                // Call was ended by other party
+                console.log('Call ended detected via localStorage polling');
+                endVideoCall();
+            }
+        } catch (error) {
+            console.error('Error checking localStorage for call end:', error);
         }
     }, 1000); // Check every second
 }
@@ -1682,18 +1806,182 @@ function stopCallEndPolling() {
     }
 }
 
+// Initialize video streams (placeholder - WebRTC can be added later)
+function initializeVideoStreams() {
+    // Request user media for local video
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                const localVideo = document.getElementById('local-video');
+                if (localVideo) {
+                    localVideo.srcObject = stream;
+                    localVideo.play().catch(err => console.log('Video play error:', err));
+                    
+                    // Hide placeholder when video starts
+                    const placeholder = document.getElementById('local-video-placeholder');
+                    if (placeholder) placeholder.style.display = 'none';
+                    
+                    // Mark video box as active
+                    const localVideoBox = document.getElementById('local-video-box');
+                    if (localVideoBox) {
+                        localVideoBox.setAttribute('data-video-active', 'true');
+                    }
+                }
+            })
+            .catch(error => {
+                console.log('Could not access camera/microphone:', error);
+                // Continue without video - user can still use the call
+                // Show a message that video is unavailable
+                const placeholder = document.getElementById('local-video-placeholder');
+                if (placeholder) {
+                    placeholder.querySelector('p').textContent = 'Camera unavailable';
+                }
+            });
+    } else {
+        console.log('getUserMedia not supported in this browser');
+    }
+}
+
+// Call timer functions
+function startCallTimer() {
+    stopCallTimer(); // Clear any existing timer
+    callStartTime = new Date();
+    
+    callTimerInterval = setInterval(() => {
+        if (!callStartTime) return;
+        
+        const elapsed = Math.floor((new Date() - callStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        
+        const timerEl = document.getElementById('call-timer');
+        if (timerEl) {
+            timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+function stopCallTimer() {
+    if (callTimerInterval) {
+        clearInterval(callTimerInterval);
+        callTimerInterval = null;
+    }
+    callStartTime = null;
+}
+
+// Prescription functions
+let prescriptionDebounceTimer = null;
+
+function onPrescriptionChange() {
+    if (!currentCallId || !currentConsultation) return;
+    
+    const prescriptionTextarea = document.getElementById('prescription-textarea');
+    const prescription = prescriptionTextarea.value;
+    
+    // Debounce to avoid too many updates
+    if (prescriptionDebounceTimer) {
+        clearTimeout(prescriptionDebounceTimer);
+    }
+    
+    prescriptionDebounceTimer = setTimeout(() => {
+        // Send prescription update via Socket.io
+        if (typeof socket !== 'undefined' && socket && socket.connected) {
+            socket.emit('prescriptionUpdate', {
+                callId: currentCallId,
+                consultationId: currentConsultation.id,
+                prescription: prescription
+            });
+        }
+    }, 500); // Wait 500ms after user stops typing
+}
+
+function clearPrescription() {
+    const prescriptionTextarea = document.getElementById('prescription-textarea');
+    if (prescriptionTextarea && confirm('Are you sure you want to clear the prescription?')) {
+        prescriptionTextarea.value = '';
+        onPrescriptionChange(); // Sync the clear
+    }
+}
+
+async function savePrescription() {
+    if (!currentCallId || !currentConsultation) return;
+    
+    const prescriptionTextarea = document.getElementById('prescription-textarea');
+    const prescription = prescriptionTextarea.value.trim();
+    
+    if (!prescription) {
+        alert('Please write a prescription before saving.');
+        return;
+    }
+    
+    // Save to consultation
+    try {
+        // Update consultation with prescription via API
+        const consultations = await getConsultations(currentConsultation.patientEmail || currentConsultation.doctorEmail, 'Patient');
+        const consultation = consultations.find(c => c.id === currentConsultation.id);
+        
+        if (consultation) {
+            consultation.prescription = prescription;
+            consultation.prescriptionUpdatedAt = new Date().toISOString();
+            
+            // Save to localStorage
+            const allConsultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+            const index = allConsultations.findIndex(c => c.id === consultation.id);
+            if (index !== -1) {
+                allConsultations[index] = consultation;
+                localStorage.setItem('consultations', JSON.stringify(allConsultations));
+            }
+        }
+        
+        alert('✅ Prescription saved successfully!');
+    } catch (error) {
+        console.error('Error saving prescription:', error);
+        alert('Prescription saved locally. Some features may not work until server connection is restored.');
+    }
+}
+
 async function endVideoCall() {
+    // Stop video streams
+    const localVideo = document.getElementById('local-video');
+    if (localVideo && localVideo.srcObject) {
+        localVideo.srcObject.getTracks().forEach(track => track.stop());
+    }
+    
+    // Stop timer
+    stopCallTimer();
+    
     // Mark call as ended via API (with localStorage fallback)
+    // Try to end by callId, or by consultation ID if available
+    const callIdsToTry = [];
     if (currentCallId) {
+        callIdsToTry.push(currentCallId);
+    }
+    if (currentConsultation && currentConsultation.id) {
+        callIdsToTry.push(currentConsultation.id);
+    }
+    
+    let callEnded = false;
+    for (const callId of callIdsToTry) {
         try {
-            await endCall(currentCallId);
+            await endCall(callId);
+            callEnded = true;
+            console.log('✅ Call ended via API for callId:', callId);
+            break;
         } catch (error) {
-            // Fallback to localStorage
-            const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
-            if (activeCalls[currentCallId]) {
-                activeCalls[currentCallId].ended = true;
-                activeCalls[currentCallId].endTime = new Date().toISOString();
+            console.log('Failed to end call with callId:', callId, error);
+        }
+    }
+    
+    // Fallback to localStorage
+    if (!callEnded) {
+        const activeCalls = JSON.parse(localStorage.getItem('activeCalls') || '{}');
+        for (const callId of callIdsToTry) {
+            if (activeCalls[callId]) {
+                activeCalls[callId].ended = true;
+                activeCalls[callId].endTime = new Date().toISOString();
                 localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+                console.log('✅ Call ended via localStorage for callId:', callId);
+                break;
             }
         }
     }
@@ -1704,6 +1992,7 @@ async function endVideoCall() {
     
     // Clear current call ID
     currentCallId = null;
+    currentConsultation = null;
     
     document.getElementById('video-call-screen').style.display = 'none';
     loadDashboard();

@@ -194,17 +194,77 @@
         </div>
     </div>
 
-    <!-- Video Call Screen (Placeholder) -->
+    <!-- Video Call Screen -->
     <div id="video-call-screen" class="video-call-container" style="display: none;">
         <div class="video-call-header">
-            <h2>📹 Video Consultation</h2>
-            <button class="btn-end-call" onclick="endVideoCall()">End Call</button>
+            <div class="call-header-left">
+                <div class="call-timer" id="call-timer">00:00</div>
+                <div class="call-participant-name" id="call-participant-name">Consultation</div>
+            </div>
+            <button class="btn-end-call" onclick="endVideoCall()">📞 End Call</button>
         </div>
         <div class="video-call-content">
-            <div id="call-participant-info"></div>
-            <div class="video-placeholder">
-                <p>🎥 Video call interface will be implemented here</p>
-                <p id="call-details"></p>
+            <div class="video-call-main">
+                <!-- Video Container -->
+                <div class="video-container-wrapper">
+                    <div class="video-box-container">
+                        <!-- Remote Video (Other Party) -->
+                        <div class="video-box remote-video" id="remote-video-box">
+                            <video id="remote-video" autoplay playsinline></video>
+                            <div class="video-placeholder-content" id="remote-video-placeholder">
+                                <div class="video-avatar">👤</div>
+                                <p id="remote-video-label">Waiting for participant...</p>
+                            </div>
+                            <div class="video-controls-overlay">
+                                <div class="video-label" id="remote-video-name-label"></div>
+                                <div class="video-status-indicator" id="remote-status">●</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Local Video (Self) -->
+                        <div class="video-box local-video" id="local-video-box">
+                            <video id="local-video" autoplay playsinline muted></video>
+                            <div class="video-placeholder-content" id="local-video-placeholder">
+                                <div class="video-avatar">You</div>
+                                <p>Your video</p>
+                            </div>
+                            <div class="video-controls-overlay">
+                                <div class="video-label">You</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right Panel: Patient Info & Prescription -->
+                <div class="video-call-sidebar">
+                    <!-- Patient/Doctor Info -->
+                    <div class="call-info-panel" id="call-info-panel">
+                        <h3 id="call-info-title">Participant Information</h3>
+                        <div id="call-participant-details"></div>
+                    </div>
+                    
+                    <!-- Prescription Panel (Only visible to doctor, but synced to patient) -->
+                    <div class="prescription-panel" id="prescription-panel">
+                        <div class="prescription-header">
+                            <h3>📋 Prescription</h3>
+                            <button class="btn-save-prescription" id="btn-save-prescription" onclick="savePrescription()" style="display: none;">💾 Save</button>
+                        </div>
+                        <textarea 
+                            id="prescription-textarea" 
+                            class="prescription-textarea" 
+                            placeholder="Doctor: Write prescription here... (Updates in real-time for both parties)"
+                            oninput="onPrescriptionChange()"
+                            readonly
+                        ></textarea>
+                        <div class="prescription-actions" id="prescription-actions" style="display: none;">
+                            <button class="btn-clear-prescription" onclick="clearPrescription()">Clear</button>
+                            <button class="btn-send-prescription" onclick="savePrescription()">Save Prescription</button>
+                        </div>
+                        <div id="prescription-readonly-notice" class="prescription-notice">
+                            <p>📝 Prescription will appear here when the doctor writes it.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
