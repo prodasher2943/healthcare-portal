@@ -174,9 +174,16 @@ async function registerUserOnServer(email, userData, userType) {
         });
         
         // Also save to localStorage as backup
+        // IMPORTANT: Preserve the password from local storage - server doesn't have it!
         const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
         if (result && result.user) {
-            usersDB[email] = result.user;
+            // Preserve the password and other local-only fields
+            const existingUser = usersDB[email] || {};
+            usersDB[email] = {
+                ...result.user, // Server data (user_data, user_type, etc.)
+                password: existingUser.password, // Preserve password from local registration
+                registered_date: existingUser.registered_date || result.user.registered_date
+            };
             localStorage.setItem('usersDB', JSON.stringify(usersDB));
         }
         

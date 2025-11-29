@@ -58,13 +58,21 @@ async function localRegisterUser(email, password, userType, userData) {
         
         saveUsersDB(users);
         
-        // Verify the user was saved
+        // Verify the user was saved with password
         const savedUsers = getUsersDB();
-        if (!savedUsers[email]) {
+        const savedUser = savedUsers[email];
+        if (!savedUser) {
             console.error('User was not saved to localStorage!');
             return { success: false, message: 'Registration failed. Please try again.' };
         }
         
+        // Verify password was saved
+        if (!savedUser.password || savedUser.password.length === 0) {
+            console.error('Password was not saved! Password length:', savedUser.password ? savedUser.password.length : 0);
+            return { success: false, message: 'Registration failed: password not saved. Please try again.' };
+        }
+        
+        console.log('✅ User registered successfully. Password length:', savedUser.password.length);
         return { success: true, message: 'Registration successful!' };
     } catch (error) {
         console.error('Error in localRegisterUser:', error);
@@ -89,10 +97,19 @@ async function localLoginUser(email, password) {
             email: email,
             passwordLength: password.length,
             storedPasswordLength: storedPassword ? storedPassword.length : 0,
-            passwordsMatch: storedPassword === hashedPassword
+            storedPasswordExists: !!storedPassword,
+            hashedPasswordLength: hashedPassword.length,
+            passwordsMatch: storedPassword === hashedPassword,
+            storedPasswordPreview: storedPassword ? storedPassword.substring(0, 10) + '...' : 'null'
         });
         
+        if (!storedPassword || storedPassword.length === 0) {
+            console.error('No password stored for user:', email);
+            return { success: false, message: 'No password found. Please register again.' };
+        }
+        
         if (storedPassword !== hashedPassword) {
+            console.error('Password mismatch! Stored:', storedPassword.substring(0, 20), '... Calculated:', hashedPassword.substring(0, 20), '...');
             return { success: false, message: 'Incorrect password. Please try again.' };
         }
         
