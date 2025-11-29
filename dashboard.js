@@ -49,14 +49,17 @@ function loadDashboard() {
     if (isPatient) {
         document.getElementById('patient-dashboard').style.display = 'block';
         document.getElementById('doctor-dashboard').style.display = 'none';
-        document.getElementById('welcome-message').textContent = `👋 Welcome, ${userInfo.name || 'User'}!`;
+        const patientName = (userInfo && userInfo.name) ? userInfo.name : 'User';
+        document.getElementById('welcome-message').textContent = `👋 Welcome, ${patientName}!`;
         document.getElementById('user-type-display').textContent = 'You are logged in as a Patient';
         console.log('Loaded patient dashboard');
     } else {
         document.getElementById('patient-dashboard').style.display = 'none';
         document.getElementById('doctor-dashboard').style.display = 'block';
-        document.getElementById('doctor-welcome-message').textContent = `👋 Welcome, Dr. ${userInfo.name || 'User'}!`;
-        document.getElementById('doctor-type-display').textContent = `You are logged in as a Doctor - ${userInfo.specialization || 'General'} Specialist`;
+        const doctorName = (userInfo && userInfo.name) ? userInfo.name : 'User';
+        document.getElementById('doctor-welcome-message').textContent = `👋 Welcome, Dr. ${doctorName}!`;
+        const specialization = (userInfo && userInfo.specialization) ? userInfo.specialization : 'General';
+        document.getElementById('doctor-type-display').textContent = `You are logged in as a Doctor - ${specialization} Specialist`;
         console.log('Loaded doctor dashboard');
     }
 }
@@ -1511,10 +1514,13 @@ async function loadConsultationHistory() {
         if (request.patientEmail === userData.email) {
             // User is patient, show doctor name
             const doctor = users[request.doctorEmail];
-            otherPartyName = doctor ? `Dr. ${doctor.user_data.name}` : request.doctorEmail;
+            const doctorName = (doctor && doctor.user_data && doctor.user_data.name) 
+                ? doctor.user_data.name 
+                : (request.doctorEmail || 'Unknown Doctor');
+            otherPartyName = `Dr. ${doctorName}`;
         } else {
             // User is doctor, show patient name
-            otherPartyName = request.patientName;
+            otherPartyName = request.patientName || 'Unknown Patient';
         }
         
         return `
@@ -1741,6 +1747,26 @@ async function startVideoCall(consultation) {
                 if (prescriptionNotice) prescriptionNotice.style.display = 'block';
             }
         }
+    }
+    
+    // Reset video control states
+    isMicMuted = false;
+    isVideoOff = false;
+    
+    // Reset control buttons
+    const micBtn = document.getElementById('toggle-mic-btn');
+    if (micBtn) {
+        micBtn.classList.remove('muted');
+        micBtn.title = 'Mute Microphone';
+        const micIcon = micBtn.querySelector('.control-icon');
+        if (micIcon) micIcon.textContent = '🎤';
+    }
+    const cameraBtn = document.getElementById('toggle-camera-btn');
+    if (cameraBtn) {
+        cameraBtn.classList.remove('video-off');
+        cameraBtn.title = 'Turn Camera Off';
+        const cameraIcon = cameraBtn.querySelector('.control-icon');
+        if (cameraIcon) cameraIcon.textContent = '📹';
     }
     
     // Initialize video streams with WebRTC
@@ -2122,8 +2148,94 @@ async function savePrescription() {
     }
 }
 
+// Video Call Control Functions
+let isMicMuted = false;
+let isVideoOff = false;
+
+function toggleMicrophone() {
+    if (!localStream) {
+        console.log('No local stream available');
+        return;
+    }
+    
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+        console.log('No audio tracks available');
+        return;
+    }
+    
+    isMicMuted = !isMicMuted;
+    audioTracks.forEach(track => {
+        track.enabled = !isMicMuted;
+    });
+    
+    // Update button appearance
+    const micBtn = document.getElementById('toggle-mic-btn');
+    if (micBtn) {
+        const micIcon = micBtn.querySelector('.control-icon');
+        if (isMicMuted) {
+            micBtn.classList.add('muted');
+            if (micIcon) micIcon.textContent = '🎤';
+            micBtn.title = 'Unmute Microphone';
+        } else {
+            micBtn.classList.remove('muted');
+            if (micIcon) micIcon.textContent = '🎤';
+            micBtn.title = 'Mute Microphone';
+        }
+    }
+    
+    console.log(`Microphone ${isMicMuted ? 'muted' : 'unmuted'}`);
+}
+
+function toggleCamera() {
+    if (!localStream) {
+        console.log('No local stream available');
+        return;
+    }
+    
+    const videoTracks = localStream.getVideoTracks();
+    if (videoTracks.length === 0) {
+        console.log('No video tracks available');
+        return;
+    }
+    
+    isVideoOff = !isVideoOff;
+    videoTracks.forEach(track => {
+        track.enabled = !isVideoOff;
+    });
+    
+    // Update button appearance
+    const cameraBtn = document.getElementById('toggle-camera-btn');
+    if (cameraBtn) {
+        const cameraIcon = cameraBtn.querySelector('.control-icon');
+        if (isVideoOff) {
+            cameraBtn.classList.add('video-off');
+            if (cameraIcon) cameraIcon.textContent = '📹';
+            cameraBtn.title = 'Turn Camera On';
+            
+            // Show placeholder when video is off
+            const placeholder = document.getElementById('local-video-placeholder');
+            if (placeholder) placeholder.style.display = 'flex';
+        } else {
+            cameraBtn.classList.remove('video-off');
+            if (cameraIcon) cameraIcon.textContent = '📹';
+            cameraBtn.title = 'Turn Camera Off';
+            
+            // Hide placeholder when video is on
+            const placeholder = document.getElementById('local-video-placeholder');
+            if (placeholder) placeholder.style.display = 'none';
+        }
+    }
+    
+    console.log(`Camera ${isVideoOff ? 'turned off' : 'turned on'}`);
+}
+
 // Cleanup WebRTC connections
 function cleanupWebRTC() {
+    // Reset control states
+    isMicMuted = false;
+    isVideoOff = false;
+    
     // Close peer connection
     if (peerConnection) {
         peerConnection.ontrack = null;
