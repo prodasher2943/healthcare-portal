@@ -391,12 +391,50 @@ function initSocket() {
                     peerConnection.pendingIceCandidates = [];
                 }
                 
+                // Verify we have local tracks in peer connection before creating answer
+                const senders = peerConnection.getSenders();
+                const audioSenders = senders.filter(s => s.track && s.track.kind === 'audio');
+                const videoSenders = senders.filter(s => s.track && s.track.kind === 'video');
+                
+                console.log(`📊 Peer connection has ${senders.length} sender(s) before creating answer:`);
+                console.log(`   - ${audioSenders.length} audio sender(s)`);
+                console.log(`   - ${videoSenders.length} video sender(s)`);
+                
+                if (audioSenders.length === 0 || videoSenders.length === 0) {
+                    console.warn('⚠️ WARNING: Missing tracks in peer connection before creating answer!');
+                    if (typeof localStream !== 'undefined' && localStream) {
+                        console.log('📤 Re-adding local tracks to peer connection...');
+                        localStream.getTracks().forEach(track => {
+                            const hasTrack = senders.some(s => s.track && s.track.id === track.id);
+                            if (!hasTrack) {
+                                console.log(`📤 Adding ${track.kind} track to peer connection`);
+                                peerConnection.addTrack(track, localStream);
+                            }
+                        });
+                    }
+                }
+                
+                // Wait a moment for tracks to be added
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
                 // Create answer with both audio and video
+                console.log('📞 Creating WebRTC answer...');
                 const answer = await peerConnection.createAnswer({
                     offerToReceiveAudio: true,
                     offerToReceiveVideo: true
                 });
+                
+                // Verify answer SDP includes both media types
+                const answerSdp = answer.sdp || '';
+                const hasAudio = answerSdp.includes('m=audio') || answerSdp.includes('audio');
+                const hasVideo = answerSdp.includes('m=video') || answerSdp.includes('video');
+                
+                console.log(`📤 Answer created:`);
+                console.log(`   - Audio in SDP: ${hasAudio}`);
+                console.log(`   - Video in SDP: ${hasVideo}`);
+                
                 await peerConnection.setLocalDescription(answer);
+                console.log('✅ Local description set (answer)');
                 
                 // Send answer back
                 socket.emit('webrtcAnswer', {

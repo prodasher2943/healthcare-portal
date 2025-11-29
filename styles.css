@@ -2560,7 +2560,7 @@ body {
 .prescription-panel {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    padding: 1.5rem;
+    padding: 1.25rem;
     color: white;
     display: flex;
     flex-direction: column;
@@ -2568,26 +2568,44 @@ body {
     min-height: 300px;
     max-height: 100%;
     overflow: hidden;
+    gap: 0.75rem;
 }
 
 .prescription-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    flex-shrink: 0;
+    gap: 1rem;
 }
 
 .prescription-header h3 {
     margin: 0;
     font-size: 1.1rem;
     color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
+}
+
+.prescription-header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.prescription-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .prescription-textarea {
     width: 100%;
     flex: 1;
-    min-height: 200px;
-    max-height: 400px;
+    min-height: 180px;
+    max-height: calc(100vh - 450px);
     background: rgba(0, 0, 0, 0.3);
     border: 2px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
@@ -2601,11 +2619,13 @@ body {
     overflow-x: hidden;
     word-wrap: break-word;
     box-sizing: border-box;
+    transition: border-color 0.3s ease;
 }
 
 .prescription-textarea:focus {
     outline: none;
     border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
 }
 
 .prescription-textarea:read-only {
@@ -2622,44 +2642,59 @@ body {
 .btn-clear-prescription,
 .btn-send-prescription,
 .btn-save-prescription {
-    padding: 0.6rem 1.2rem;
+    padding: 0.65rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .btn-clear-prescription {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     color: white;
 }
 
 .btn-clear-prescription:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .btn-send-prescription,
 .btn-save-prescription {
-    background: #4caf50;
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
     color: white;
     flex: 1;
 }
 
 .btn-send-prescription:hover,
 .btn-save-prescription:hover {
-    background: #45a049;
+    background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.btn-save-prescription:active,
+.btn-clear-prescription:active {
+    transform: translateY(0);
 }
 
 .prescription-notice {
-    margin-top: 1rem;
     padding: 1rem;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     text-align: center;
     color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
+    flex-shrink: 0;
 }
 
 /* Responsive video call interface */
@@ -2704,6 +2739,18 @@ body {
     
     .prescription-textarea {
         min-height: 200px;
+        max-height: calc(100vh - 350px);
+    }
+    
+    .prescription-header-actions {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+    
+    .btn-clear-prescription,
+    .btn-save-prescription {
+        padding: 0.5rem 0.8rem;
+        font-size: 0.8rem;
     }
     
     .video-call-controls {
@@ -2737,6 +2784,30 @@ body {
         height: 90px;
         bottom: 4rem;
         right: 0.5rem;
+    }
+    
+    .prescription-textarea {
+        min-height: 150px;
+        max-height: calc(100vh - 380px);
+        font-size: 0.85rem;
+        padding: 0.75rem;
+    }
+    
+    .prescription-header h3 {
+        font-size: 1rem;
+    }
+    
+    .prescription-header-actions {
+        flex-direction: column;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+    
+    .btn-clear-prescription,
+    .btn-save-prescription {
+        width: 100%;
+        padding: 0.6rem;
+        font-size: 0.85rem;
     }
     
     .video-call-controls {

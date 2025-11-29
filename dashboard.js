@@ -1981,7 +1981,7 @@ async function startVideoCall(consultation) {
     
     // Set up prescription panel
     const prescriptionTextarea = document.getElementById('prescription-textarea');
-    const prescriptionActions = document.getElementById('prescription-actions');
+    const prescriptionHeaderActions = document.getElementById('prescription-header-actions');
     const prescriptionNotice = document.getElementById('prescription-readonly-notice');
     
     if (isDoctor) {
@@ -1991,7 +1991,8 @@ async function startVideoCall(consultation) {
             prescriptionTextarea.placeholder = 'Write prescription here... (Updates in real-time for patient)';
             // oninput attribute in HTML already calls onPrescriptionChange, no need to add listener
             
-            if (prescriptionActions) prescriptionActions.style.display = 'flex';
+            // Show header actions (Clear and Save buttons) for doctor
+            if (prescriptionHeaderActions) prescriptionHeaderActions.style.display = 'flex';
             if (prescriptionNotice) prescriptionNotice.style.display = 'none';
             
             // Load existing prescription if any
@@ -2006,7 +2007,8 @@ async function startVideoCall(consultation) {
         if (prescriptionTextarea) {
             prescriptionTextarea.setAttribute('readonly', 'true');
             prescriptionTextarea.placeholder = 'Prescription will appear here when the doctor writes it...';
-            if (prescriptionActions) prescriptionActions.style.display = 'none';
+            // Hide header actions for patient
+            if (prescriptionHeaderActions) prescriptionHeaderActions.style.display = 'none';
             
             // Load existing prescription if any
             if (consultation.prescription) {
@@ -2039,13 +2041,31 @@ async function startVideoCall(consultation) {
         if (cameraIcon) cameraIcon.textContent = '📹';
     }
     
-    // Reset remote stream
+    // Reset remote stream and video element
     remoteStream = null;
     
-    // Ensure remote video is not muted (for audio playback)
+    // Reset remote video element
     const remoteVideo = document.getElementById('remote-video');
     if (remoteVideo) {
+        // Stop any existing stream
+        if (remoteVideo.srcObject) {
+            const oldStream = remoteVideo.srcObject;
+            oldStream.getTracks().forEach(track => track.stop());
+        }
+        remoteVideo.srcObject = null;
         remoteVideo.muted = false;
+        remoteVideo.volume = 1.0;
+        
+        // Show placeholder again
+        const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
+        if (remoteVideoPlaceholder) {
+            remoteVideoPlaceholder.style.display = 'block';
+        }
+        
+        const remoteVideoBox = document.getElementById('remote-video-box');
+        if (remoteVideoBox) {
+            remoteVideoBox.removeAttribute('data-video-active');
+        }
     }
     
     // Video streams should already be initialized above
@@ -2329,88 +2349,199 @@ function createPeerConnection() {
     // Handle remote stream - can receive multiple tracks (audio + video)
     peerConnection.ontrack = (event) => {
         console.log('📹 Received remote track:', event.track.kind, 'Streams:', event.streams.length);
+        console.log('📹 Track details:', {
+            kind: event.track.kind,
+            id: event.track.id,
+            enabled: event.track.enabled,
+            readyState: event.track.readyState,
+            streamCount: event.streams.length
+        });
         
-        // Initialize remote stream if it doesn't exist
-        if (!remoteStream) {
-            remoteStream = new MediaStream();
-        }
-        
-        // Add the received track to our remote stream
         const track = event.track;
-        const existingTrack = remoteStream.getTracks().find(
-            t => t.kind === track.kind && t.id === track.id
-        );
+        const incomingStreams = event.streams || [];
         
-        if (!existingTrack) {
-            console.log(`✅ Adding remote ${track.kind} track to stream`);
-            remoteStream.addTrack(track);
-            
-            // Log track state
-            track.onended = () => {
-                console.log(`❌ Remote ${track.kind} track ended`);
-            };
-            
-            track.onmute = () => {
-                console.log(`🔇 Remote ${track.kind} track muted`);
-            };
-            
-            track.onunmute = () => {
-                console.log(`🔊 Remote ${track.kind} track unmuted`);
-            };
-        } else {
-            console.log(`⚠️ Remote ${track.kind} track already exists`);
-        }
+        // CRITICAL: Use the stream from the event directly (most reliable WebRTC pattern)
+        // The stream from the event already contains all tracks from the sender
+        let streamToUse = null;
         
-        // Update remote video element with the merged stream
-        const remoteVideo = document.getElementById('remote-video');
-        if (remoteVideo && remoteStream) {
-            // Always update srcObject to ensure we have the latest stream with all tracks
-            remoteVideo.srcObject = remoteStream;
+        if (incomingStreams.length > 0) {
+            // Use the first stream from the event - it already has all tracks
+            streamToUse = incomingStreams[0];
+            console.log(`✅ Using stream from event (has ${streamToUse.getTracks().length} track(s))`);
             
-            // CRITICAL: Remote video must NOT be muted to hear audio
-            remoteVideo.muted = false;
-            
-            // Ensure volume is set (may be needed for some browsers)
-            remoteVideo.volume = 1.0;
-            
-            // Force play with audio enabled
-            remoteVideo.play().then(() => {
-                console.log('✅ Remote video playing with audio');
-            }).catch(err => {
-                console.error('Remote video play error:', err);
-                // Try again after a short delay
-                setTimeout(() => {
-                    remoteVideo.play().catch(e => console.error('Retry play failed:', e));
-                }, 500);
+            // Log all tracks in the incoming stream
+            streamToUse.getTracks().forEach(t => {
+                console.log(`   - Incoming ${t.kind} track: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`);
             });
-            
-            // Hide placeholder when we have video track
-            if (track.kind === 'video') {
-                const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
-                if (remoteVideoPlaceholder) remoteVideoPlaceholder.style.display = 'none';
-                
-                const remoteVideoBox = document.getElementById('remote-video-box');
-                if (remoteVideoBox) {
-                    remoteVideoBox.setAttribute('data-video-active', 'true');
-                }
+        } else {
+            // Fallback: build up stream manually (shouldn't happen, but just in case)
+            console.warn('⚠️ No streams in event - building stream manually');
+            if (!remoteStream) {
+                remoteStream = new MediaStream();
             }
+            streamToUse = remoteStream;
             
-            // Log all tracks in the stream
-            const trackKinds = remoteStream.getTracks().map(t => `${t.kind}(${t.enabled ? 'on' : 'off'})`);
-            console.log('✅ Remote stream updated. Active tracks:', trackKinds.join(', '));
+            // Check if track already exists
+            const existingTrack = remoteStream.getTracks().find(
+                t => t.id === track.id
+            );
             
-            // Verify audio track exists
-            const audioTracks = remoteStream.getAudioTracks();
-            const videoTracks = remoteStream.getVideoTracks();
-            if (audioTracks.length > 0) {
-                console.log('🔊 Remote audio track is present:', audioTracks.map(t => `id:${t.id}, enabled:${t.enabled}`).join(', '));
+            if (!existingTrack) {
+                console.log(`✅ Adding remote ${track.kind} track (id: ${track.id}) to stream`);
+                remoteStream.addTrack(track);
             } else {
-                console.warn('⚠️ No audio track in remote stream yet');
-            }
-            if (videoTracks.length > 0) {
-                console.log('📹 Remote video track is present:', videoTracks.map(t => `id:${t.id}, enabled:${t.enabled}`).join(', '));
+                console.log(`⚠️ Remote ${track.kind} track already exists (id: ${track.id})`);
             }
         }
+        
+        // CRITICAL: Consolidate all tracks into a single remote stream
+        // This ensures all tracks (audio + video) are in one stream for the video element
+        if (streamToUse) {
+            // If we already have a remote stream, merge tracks
+            if (remoteStream && remoteStream !== streamToUse) {
+                // Merge tracks from streamToUse into remoteStream
+                streamToUse.getTracks().forEach(track => {
+                    const existing = remoteStream.getTracks().find(rt => rt.id === track.id);
+                    if (!existing) {
+                        console.log(`📥 Merging ${track.kind} track into remote stream`);
+                        remoteStream.addTrack(track);
+                    }
+                });
+            } else {
+                // Use the stream directly
+                remoteStream = streamToUse;
+            }
+        }
+        
+        // Log track state changes
+        track.onended = () => {
+            console.log(`❌ Remote ${track.kind} track ended`);
+        };
+        
+        track.onmute = () => {
+            console.log(`🔇 Remote ${track.kind} track muted`);
+        };
+        
+        track.onunmute = () => {
+            console.log(`🔊 Remote ${track.kind} track unmuted`);
+        };
+        
+        // Get remote video element - ensure it exists
+        const remoteVideo = document.getElementById('remote-video');
+        if (!remoteVideo) {
+            console.error('❌ Remote video element not found! Cannot display remote video.');
+            return;
+        }
+        
+        // CRITICAL: Update remote video element with the stream
+        const trackCount = remoteStream.getTracks().length;
+        console.log(`📺 Updating remote video element with stream (${trackCount} tracks)`);
+        
+        // Get all tracks for logging
+        const audioTracks = remoteStream.getAudioTracks();
+        const videoTracks = remoteStream.getVideoTracks();
+        
+        console.log(`📊 Remote stream has ${audioTracks.length} audio track(s) and ${videoTracks.length} video track(s)`);
+        
+        // CRITICAL: Set the stream on the video element FIRST
+        remoteVideo.srcObject = remoteStream;
+        
+        // CRITICAL: Configure video element for proper playback
+        remoteVideo.muted = false; // Must be false to hear audio
+        remoteVideo.volume = 1.0;
+        remoteVideo.autoplay = true;
+        remoteVideo.playsInline = true;
+        remoteVideo.controls = false;
+        
+        // Hide placeholder when we have video track
+        if (track.kind === 'video' || videoTracks.length > 0) {
+            const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
+            if (remoteVideoPlaceholder) {
+                remoteVideoPlaceholder.style.display = 'none';
+                console.log('✅ Hiding remote video placeholder');
+            }
+            
+            const remoteVideoBox = document.getElementById('remote-video-box');
+            if (remoteVideoBox) {
+                remoteVideoBox.setAttribute('data-video-active', 'true');
+            }
+        }
+        
+        // CRITICAL: Force play immediately - don't wait
+        console.log('▶️ Attempting to play remote video...');
+        
+        // Use a function to handle playing
+        const playRemoteVideo = async () => {
+            try {
+                await remoteVideo.play();
+                console.log('✅ Remote video playing successfully');
+                
+                // Verify tracks after play
+                console.log(`📊 Remote stream state after play:`);
+                console.log(`   - Total tracks: ${remoteStream.getTracks().length}`);
+                console.log(`   - Audio tracks: ${audioTracks.length}`);
+                console.log(`   - Video tracks: ${videoTracks.length}`);
+                
+                if (videoTracks.length > 0) {
+                    const vTrack = videoTracks[0];
+                    console.log(`   - Video track: enabled=${vTrack.enabled}, readyState=${vTrack.readyState}, muted=${vTrack.muted}`);
+                }
+                if (audioTracks.length > 0) {
+                    const aTrack = audioTracks[0];
+                    console.log(`   - Audio track: enabled=${aTrack.enabled}, readyState=${aTrack.readyState}, muted=${aTrack.muted}`);
+                }
+                
+                // Verify video element is actually showing video
+                const hasVideoTrack = remoteVideo.srcObject && remoteVideo.srcObject.getVideoTracks().length > 0;
+                console.log(`   - Video element has stream: ${!!remoteVideo.srcObject}`);
+                console.log(`   - Video element has video track: ${hasVideoTrack}`);
+                
+            } catch (err) {
+                console.error('❌ Remote video play error:', err);
+                console.error('   Error details:', err.message, err.name);
+                
+                // Check if it's a user interaction issue
+                if (err.name === 'NotAllowedError') {
+                    console.error('⚠️ Autoplay was blocked - video will play once user interacts with page');
+                }
+                
+                // Try again after a delay
+                setTimeout(() => {
+                    console.log('🔄 Retrying remote video play...');
+                    remoteVideo.play().then(() => {
+                        console.log('✅ Remote video play retry successful');
+                    }).catch(e => {
+                        console.error('❌ Retry play failed:', e.message);
+                        
+                        // Check diagnostic info
+                        const videoCallScreen = document.getElementById('video-call-screen');
+                        if (videoCallScreen && videoCallScreen.style.display === 'none') {
+                            console.error('⚠️ Video call screen is hidden - video won\'t play until screen is shown');
+                        }
+                        
+                        if (remoteStream.getTracks().length === 0) {
+                            console.error('⚠️ Remote stream has no tracks! This is a critical issue.');
+                        }
+                        
+                        // Log video element state
+                        console.log('📺 Video element state:', {
+                            paused: remoteVideo.paused,
+                            muted: remoteVideo.muted,
+                            volume: remoteVideo.volume,
+                            hasSrcObject: !!remoteVideo.srcObject,
+                            readyState: remoteVideo.readyState
+                        });
+                    });
+                }, 1000);
+            }
+        };
+        
+        // Play immediately
+        playRemoteVideo();
+        
+        // Also log all tracks in the stream
+        const trackKinds = remoteStream.getTracks().map(t => `${t.kind}(${t.enabled ? 'on' : 'off'}, ${t.readyState})`);
+        console.log('✅ Remote stream updated. Active tracks:', trackKinds.join(', '));
     };
     
     // Handle ICE candidates
@@ -2480,42 +2611,70 @@ async function startWebRTCConnection() {
                 }
             }
             
-            // Ensure tracks are added to peer connection
+            // CRITICAL: Ensure ALL local tracks are added to peer connection before creating offer
             const existingSenders = peerConnection.getSenders();
             const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
             const localTracks = localStream.getTracks();
             
+            console.log(`📤 Preparing to add ${localTracks.length} local track(s) to peer connection`);
+            
             localTracks.forEach(track => {
                 if (!existingTrackIds.includes(track.id)) {
-                    console.log(`📤 Adding ${track.kind} track to peer connection before offer`);
+                    console.log(`📤 Adding ${track.kind} track (id: ${track.id}, enabled: ${track.enabled}) to peer connection`);
                     try {
+                        // Add track with the same stream reference
                         peerConnection.addTrack(track, localStream);
+                        console.log(`✅ ${track.kind} track added successfully`);
                     } catch (err) {
-                        console.error(`Error adding ${track.kind} track:`, err);
+                        console.error(`❌ Error adding ${track.kind} track:`, err);
                     }
+                } else {
+                    console.log(`✓ ${track.kind} track already in peer connection`);
                 }
             });
             
-            // Verify we have tracks
+            // Verify we have tracks BEFORE creating offer
             const senders = peerConnection.getSenders();
-            console.log(`✅ Peer connection has ${senders.length} senders before creating offer`);
+            const audioSenders = senders.filter(s => s.track && s.track.kind === 'audio');
+            const videoSenders = senders.filter(s => s.track && s.track.kind === 'video');
             
-            // Wait a moment for tracks to be fully added
-            await new Promise(resolve => setTimeout(resolve, 200));
+            console.log(`✅ Peer connection has ${senders.length} sender(s) before creating offer:`);
+            console.log(`   - ${audioSenders.length} audio sender(s)`);
+            console.log(`   - ${videoSenders.length} video sender(s)`);
             
-            // Create offer with explicit audio/video
+            if (audioSenders.length === 0) {
+                console.warn('⚠️ WARNING: No audio tracks in peer connection before creating offer!');
+            }
+            if (videoSenders.length === 0) {
+                console.warn('⚠️ WARNING: No video tracks in peer connection before creating offer!');
+            }
+            
+            // Wait a moment for tracks to be fully added to peer connection
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Create offer with explicit audio/video requirements
+            console.log('📞 Creating WebRTC offer...');
             const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: true
             });
             
-            // Verify offer includes both media types
-            const offerString = JSON.stringify(offer.sdp);
-            const hasAudio = offerString.includes('audio') || offerString.includes('m=audio');
-            const hasVideo = offerString.includes('video') || offerString.includes('m=video');
-            console.log(`📤 Offer created - Audio: ${hasAudio}, Video: ${hasVideo}`);
+            // Verify offer SDP includes both media types
+            const offerSdp = offer.sdp || '';
+            const hasAudio = offerSdp.includes('m=audio') || offerSdp.includes('audio');
+            const hasVideo = offerSdp.includes('m=video') || offerSdp.includes('video');
+            
+            console.log(`📤 Offer created:`);
+            console.log(`   - Audio in SDP: ${hasAudio}`);
+            console.log(`   - Video in SDP: ${hasVideo}`);
+            console.log(`   - SDP preview: ${offerSdp.substring(0, 200)}...`);
+            
+            if (!hasAudio || !hasVideo) {
+                console.warn('⚠️ WARNING: Offer may be missing audio or video media!');
+            }
             
             await peerConnection.setLocalDescription(offer);
+            console.log('✅ Local description set');
             
             // Send offer via Socket.io
             socket.emit('webrtcOffer', {
@@ -2524,7 +2683,7 @@ async function startWebRTCConnection() {
                 offer: offer
             });
             
-            console.log('📤 Offer sent via Socket.io');
+            console.log('📤 Offer sent via Socket.io to remote party');
         } else {
             // Patient waits for offer from doctor
             console.log('📥 Patient waiting for offer from doctor...');
