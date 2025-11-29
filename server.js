@@ -186,14 +186,61 @@ app.put('/api/consultations/:id', (req, res) => {
     consultation.status = status;
     if (status === 'accepted') {
         consultation.acceptedDate = new Date().toISOString();
+        
+        // Start call immediately when accepted
+        let callId = null;
+        for (const [existingCallId, call] of Object.entries(activeCalls)) {
+            if (call.consultationId === consultation.id && !call.ended) {
+                callId = existingCallId;
+                break;
+            }
+        }
+        
+        if (!callId) {
+            callId = `call_${consultation.id}_${Date.now()}`;
+            activeCalls[callId] = {
+                consultationId: consultation.id,
+                startTime: new Date().toISOString(),
+                ended: false
+            };
+        }
+        
+        // Notify BOTH patient and doctor via Socket.io about call start
+        const patientSocketId = onlineUsers.get(consultation.patientEmail);
+        const doctorSocketId = onlineUsers.get(consultation.doctorEmail);
+        
+        console.log(`📞 Consultation accepted - Notifying participants. Patient: ${patientSocketId}, Doctor: ${doctorSocketId}`);
+        
+        // Notify patient with call info
+        if (patientSocketId) {
+            io.to(patientSocketId).emit('consultationStatusUpdate', consultation);
+            io.to(patientSocketId).emit('callStarted', { 
+                callId: callId, 
+                consultationId: consultation.id,
+                consultation: consultation
+            });
+            console.log(`✅ Notified patient at socket ${patientSocketId}`);
+        } else {
+            console.warn(`⚠️ Patient ${consultation.patientEmail} not online`);
+        }
+        
+        // Notify doctor with call info (they may need it too)
+        if (doctorSocketId) {
+            io.to(doctorSocketId).emit('callStarted', { 
+                callId: callId, 
+                consultationId: consultation.id,
+                consultation: consultation
+            });
+        }
+        
     } else if (status === 'rejected') {
         consultation.rejectedDate = new Date().toISOString();
-    }
-    
-    // Notify patient in real-time
-    const patientSocketId = onlineUsers.get(consultation.patientEmail);
-    if (patientSocketId) {
-        io.to(patientSocketId).emit('consultationStatusUpdate', consultation);
+        
+        // Notify patient in real-time
+        const patientSocketId = onlineUsers.get(consultation.patientEmail);
+        if (patientSocketId) {
+            io.to(patientSocketId).emit('consultationStatusUpdate', consultation);
+        }
     }
     
     res.json({ success: true, consultation });
@@ -354,24 +401,29 @@ io.on('connection', (socket) => {
             ...(userData || {})
         };
 
-        // Preserve password_hash when updating user info - NEVER overwrite it with null if it exists
-        const preservedPasswordHash = existing?.password_hash || null;
+        // CRITICAL: Preserve password_hash - NEVER overwrite it with null/undefined
+        // If existing hash exists, ALWAYS keep it. Only use null if there was never a hash.
+        const preservedPasswordHash = (existing && existing.password_hash) ? existing.password_hash : null;
         
         if (existing && existing.password_hash && !preservedPasswordHash) {
             console.error(`❌ CRITICAL: Password hash would be lost for ${email}! Preserving...`);
         }
         
+        // Ensure we never accidentally lose the password hash
+        const finalPasswordHash = preservedPasswordHash || null;
+        
         usersDB[email] = {
             email,
             user_data: mergedUserData,
             user_type: finalType,
-            password_hash: preservedPasswordHash, // IMPORTANT: Preserve password hash - never overwrite if it exists
+            password_hash: finalPasswordHash, // CRITICAL: Always preserve existing hash or keep null
             registered_date: existing?.registered_date || new Date().toISOString()
         };
         
-        // Log if password_hash is missing (but don't block - might not have registered yet)
+        // Log password hash status
         if (!usersDB[email].password_hash) {
             console.log(`⚠️ No password_hash stored for ${email} yet - user may need to complete registration`);
+            console.log(`   If this user should have a password, they need to register via /api/users/register with passwordHash`);
         } else {
             console.log(`✅ Password hash preserved for ${email} (length: ${usersDB[email].password_hash.length})`);
         }

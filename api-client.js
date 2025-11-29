@@ -98,14 +98,57 @@ function initSocket() {
         console.log('📬 Consultation status updated:', consultation);
         // Handle status update
         if (consultation.status === 'accepted') {
-            startVideoCall(consultation);
+            console.log('✅ Consultation accepted - starting video call...');
+            // Use setTimeout to ensure UI is ready
+            setTimeout(() => {
+                if (typeof startVideoCall === 'function') {
+                    startVideoCall(consultation);
+                } else {
+                    console.error('startVideoCall function not found!');
+                    // Fallback: reload consultations
+                    if (typeof loadConsultationRequests === 'function') {
+                        loadConsultationRequests();
+                    }
+                }
+            }, 500);
         } else if (consultation.status === 'rejected') {
-            document.getElementById('consultation-content').innerHTML = `
-                <div class="consultation-rejected">
-                    <p>❌ Your consultation request was declined.</p>
-                    <button class="btn-primary" onclick="showConsultationModal()">Request Another Consultation</button>
-                </div>
-            `;
+            const consultationContent = document.getElementById('consultation-content');
+            if (consultationContent) {
+                consultationContent.innerHTML = `
+                    <div class="consultation-rejected">
+                        <p>❌ Your consultation request was declined.</p>
+                        <button class="btn-primary" onclick="showConsultationModal()">Request Another Consultation</button>
+                    </div>
+                `;
+            }
+        }
+    });
+    
+    // Listen for call started event (more reliable than consultationStatusUpdate)
+    socket.on('callStarted', ({ callId, consultationId, consultation }) => {
+        console.log('📞 Call started event received:', { callId, consultationId });
+        
+        const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+        if (!userData) return;
+        
+        // Check if this consultation is for the current user
+        const isRelevant = (userData.user_type === 'Patient' && consultation && consultation.patientEmail === userData.email) ||
+                          (userData.user_type === 'Doctor' && consultation && consultation.doctorEmail === userData.email);
+        
+        if (isRelevant && consultation) {
+            console.log('✅ Starting video call for current user...');
+            // Close consultation modal if open
+            const consultationModal = document.getElementById('consultation-modal');
+            if (consultationModal) {
+                consultationModal.style.display = 'none';
+            }
+            
+            // Start video call
+            setTimeout(() => {
+                if (typeof startVideoCall === 'function') {
+                    startVideoCall(consultation);
+                }
+            }, 300);
         }
     });
     
@@ -248,22 +291,86 @@ function initSocket() {
                            String(currentConsultation.id) === String(consultationId) || String(currentConsultation.id) === String(callId)));
         
         if (isOurCall) {
+            console.log('✅ This offer is for our call - processing...');
+            
+            // CRITICAL: Ensure video streams are initialized BEFORE handling offer
+            if (typeof localStream === 'undefined' || !localStream) {
+                console.log('⚠️ Local stream not initialized yet - initializing now...');
+                if (typeof initializeVideoStreams === 'function') {
+                    try {
+                        await initializeVideoStreams();
+                        console.log('✅ Local stream initialized');
+                        // Wait a moment for tracks to be added
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (err) {
+                        console.error('❌ Failed to initialize video streams:', err);
+                        return;
+                    }
+                } else {
+                    console.error('❌ initializeVideoStreams function not available');
+                    return;
+                }
+            }
+            
             // If peer connection doesn't exist yet, create it
             if (typeof peerConnection === 'undefined' || !peerConnection) {
                 console.log('⚠️ Peer connection not ready, creating now...');
                 if (typeof createPeerConnection === 'function') {
                     createPeerConnection();
-                    
-                    // Add local stream tracks if available
-                    if (typeof localStream !== 'undefined' && localStream) {
-                        localStream.getTracks().forEach(track => {
-                            peerConnection.addTrack(track, localStream);
-                        });
-                    }
                 } else {
                     console.error('⚠️ createPeerConnection function not available');
                     return;
                 }
+            }
+            
+            // CRITICAL: Ensure all local stream tracks are added to peer connection BEFORE creating answer
+            if (typeof localStream !== 'undefined' && localStream && typeof peerConnection !== 'undefined' && peerConnection) {
+                const existingSenders = peerConnection.getSenders();
+                const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
+                
+                // Get all tracks from local stream
+                const audioTracks = localStream.getAudioTracks();
+                const videoTracks = localStream.getVideoTracks();
+                const allTracks = [...audioTracks, ...videoTracks];
+                
+                console.log(`📤 Ensuring ${allTracks.length} local track(s) are added to peer connection`);
+                console.log(`   - ${audioTracks.length} audio track(s)`);
+                console.log(`   - ${videoTracks.length} video track(s)`);
+                
+                allTracks.forEach(track => {
+                    if (!existingTrackIds.includes(track.id)) {
+                        console.log(`📤 Adding ${track.kind} track (id: ${track.id}) to peer connection`);
+                        try {
+                            peerConnection.addTrack(track, localStream);
+                            console.log(`✅ ${track.kind} track added successfully`);
+                        } catch (err) {
+                            console.error(`❌ Error adding ${track.kind} track:`, err);
+                            // Try replacing if it's a duplicate
+                            const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
+                            if (existingSender) {
+                                console.log(`🔄 Replacing existing ${track.kind} track`);
+                                existingSender.replaceTrack(track).catch(e => console.error('Error replacing track:', e));
+                            }
+                        }
+                    } else {
+                        console.log(`✓ ${track.kind} track (id: ${track.id}) already in peer connection`);
+                    }
+                });
+                
+                // Verify final state
+                const finalSenders = peerConnection.getSenders();
+                const finalAudioCount = finalSenders.filter(s => s.track && s.track.kind === 'audio').length;
+                const finalVideoCount = finalSenders.filter(s => s.track && s.track.kind === 'video').length;
+                console.log(`✅ Peer connection now has ${finalAudioCount} audio sender(s) and ${finalVideoCount} video sender(s)`);
+                
+                if (finalAudioCount === 0) {
+                    console.warn('⚠️ WARNING: No audio tracks in peer connection!');
+                }
+                if (finalVideoCount === 0) {
+                    console.warn('⚠️ WARNING: No video tracks in peer connection!');
+                }
+            } else {
+                console.error('❌ Cannot add tracks - missing localStream or peerConnection');
             }
             
             try {
@@ -284,8 +391,11 @@ function initSocket() {
                     peerConnection.pendingIceCandidates = [];
                 }
                 
-                // Create answer
-                const answer = await peerConnection.createAnswer();
+                // Create answer with both audio and video
+                const answer = await peerConnection.createAnswer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
                 await peerConnection.setLocalDescription(answer);
                 
                 // Send answer back
@@ -295,9 +405,9 @@ function initSocket() {
                     answer: answer
                 });
                 
-                console.log('📤 Answer sent');
+                console.log('📤 Answer sent with audio and video tracks');
             } catch (error) {
-                console.error('Error handling WebRTC offer:', error);
+                console.error('❌ Error handling WebRTC offer:', error);
             }
         } else {
             console.log('⚠️ Offer not for current call, ignoring');
@@ -447,7 +557,7 @@ async function registerUserOnServer(email, userData, userType, passwordHash) {
             const existingUser = usersDB[email] || {};
             usersDB[email] = {
                 ...result.user, // Server data (user_data, user_type, etc.)
-                password: existingUser.password || passwordHash, // Preserve password from local registration or use hash
+                password: passwordHash, // Always use the hash that was registered on server (for consistency across devices)
                 registered_date: existingUser.registered_date || result.user.registered_date
             };
             localStorage.setItem('usersDB', JSON.stringify(usersDB));

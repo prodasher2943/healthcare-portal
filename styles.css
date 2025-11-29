@@ -448,6 +448,33 @@ body {
     transform: translateY(0);
 }
 
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-icon {
+    padding: 0.75rem;
+    background: transparent;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+}
+
+.btn-icon:hover {
+    background: #f0f0f0;
+    border-color: #667eea;
+    transform: translateY(-2px);
+}
+
 .btn-logout {
     padding: 0.75rem 1.5rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -458,6 +485,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
 .btn-logout:hover {
@@ -2874,6 +2902,22 @@ body {
         flex: 0 0 auto;
         width: auto;
     }
+    
+    .nav-actions {
+        gap: 0.5rem;
+    }
+    
+    .btn-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 1.1rem;
+        padding: 0.65rem;
+    }
+    
+    .btn-logout {
+        padding: 0.65rem 1rem;
+        font-size: 0.9rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -2902,6 +2946,37 @@ body {
     
     .medicine-info-header h2 {
         font-size: 1.2rem !important;
+    }
+    
+    .nav-actions {
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        padding: 0.6rem;
+    }
+    
+    .btn-logout {
+        padding: 0.6rem 0.875rem;
+        font-size: 0.85rem;
+    }
+    
+    .settings-modal-content {
+        max-width: 95%;
+        max-height: 95vh;
+    }
+    
+    .settings-tabs {
+        gap: 0.25rem;
+    }
+    
+    .settings-tab {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
     }
 }
 
@@ -2937,5 +3012,263 @@ body {
 .medicine-search-error {
     padding: 2rem;
     text-align: center;
+}
+
+/* Settings Modal Styles */
+.settings-modal-content {
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1.5rem 0;
+    border-bottom: 2px solid #e0e0e0;
+    flex-wrap: wrap;
+}
+
+.settings-tab {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.3s ease;
+    font-family: 'Poppins', sans-serif;
+}
+
+.settings-tab:hover {
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.settings-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    font-weight: 600;
+}
+
+.settings-tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+    padding: 1.5rem 0;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+.settings-tab-content h3 {
+    color: #667eea;
+    margin-bottom: 1.5rem;
+    font-size: 1.3rem;
+}
+
+.settings-option {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.settings-option label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.settings-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.settings-option select {
+    padding: 0.5rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+    cursor: pointer;
+    margin-left: auto;
+}
+
+.settings-option select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.settings-option small {
+    display: block;
+    color: #666;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+
+.settings-option h4 {
+    margin: 1rem 0 0.5rem 0;
+    color: #333;
+    font-size: 1rem;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+}
+
+/* Dark Mode Styles */
+body.dark-mode {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #e0e0e0;
+}
+
+body.dark-mode .dashboard-nav {
+    background: #1e1e2e;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .nav-brand h2 {
+    color: #7c8aff;
+}
+
+body.dark-mode .btn-icon {
+    border-color: #444;
+    color: #e0e0e0;
+}
+
+body.dark-mode .btn-icon:hover {
+    background: #2a2a3e;
+    border-color: #7c8aff;
+}
+
+body.dark-mode .dashboard-content,
+body.dark-mode .panel,
+body.dark-mode .welcome-card {
+    background: #1e1e2e;
+    color: #e0e0e0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .modal-content {
+    background: #1e1e2e;
+    color: #e0e0e0;
+}
+
+body.dark-mode .form-group input,
+body.dark-mode .form-group textarea,
+body.dark-mode .form-group select {
+    background: #2a2a3e;
+    border-color: #444;
+    color: #e0e0e0;
+}
+
+body.dark-mode .form-group input:focus,
+body.dark-mode .form-group textarea:focus,
+body.dark-mode .form-group select:focus {
+    border-color: #7c8aff;
+    background: #2f2f3f;
+}
+
+body.dark-mode .medicine-search-input {
+    background: #2a2a3e;
+    border-color: #444;
+    color: #e0e0e0;
+}
+
+body.dark-mode .medicine-search-input:focus {
+    border-color: #7c8aff;
+    background: #2f2f3f;
+}
+
+body.dark-mode .settings-option {
+    background: #2a2a3e;
+}
+
+body.dark-mode .settings-option small {
+    color: #aaa;
+}
+
+body.dark-mode .settings-tabs {
+    border-bottom-color: #444;
+}
+
+body.dark-mode .settings-tab {
+    color: #aaa;
+}
+
+body.dark-mode .settings-tab:hover {
+    color: #7c8aff;
+    background: rgba(124, 138, 255, 0.1);
+}
+
+body.dark-mode .settings-tab.active {
+    color: #7c8aff;
+    border-bottom-color: #7c8aff;
+}
+
+body.dark-mode .message-content {
+    background: #2a2a3e;
+    color: #e0e0e0;
+}
+
+body.dark-mode .panel-header h3 {
+    color: #7c8aff;
+}
+
+body.dark-mode .chat-title,
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3 {
+    color: #e0e0e0;
+}
+
+body.dark-mode .btn-primary {
+    background: linear-gradient(135deg, #7c8aff 0%, #9b6eff 100%);
+}
+
+body.dark-mode .btn-secondary {
+    background: #444;
+    color: #e0e0e0;
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: #555;
+}
+
+body.dark-mode .doctor-card,
+body.dark-mode .request-card,
+body.dark-mode .history-card {
+    background: #2a2a3e;
+    border-color: #444;
+}
+
+body.dark-mode .doctor-card:hover,
+body.dark-mode .request-card:hover {
+    box-shadow: 0 4px 15px rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .circle {
+    background: rgba(124, 138, 255, 0.1);
 }
 

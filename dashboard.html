@@ -31,7 +31,15 @@
                     <button class="btn-search-medicine" onclick="searchMedicine()" title="Search Medicine">🔍</button>
                 </div>
             </div>
-            <button class="btn-logout" onclick="logout()">🚪 Logout</button>
+            <div class="nav-actions">
+                <button class="btn-icon" id="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+                    <span id="theme-icon">🌙</span>
+                </button>
+                <button class="btn-icon" id="settings-btn" onclick="openSettings()" title="Settings">
+                    ⚙️
+                </button>
+                <button class="btn-logout" onclick="logout()">🚪 Logout</button>
+            </div>
         </nav>
 
         <div class="dashboard-content">
@@ -192,6 +200,133 @@
                 </div>
                 <button type="submit" class="btn-primary">Add Medicine</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content settings-modal-content">
+            <span class="close" onclick="closeSettings()">&times;</span>
+            <h2>⚙️ Settings</h2>
+            
+            <div class="settings-tabs">
+                <button class="settings-tab active" onclick="openSettingsTab('profile')">👤 Profile</button>
+                <button class="settings-tab" onclick="openSettingsTab('appearance')">🎨 Appearance</button>
+                <button class="settings-tab" onclick="openSettingsTab('notifications')">🔔 Notifications</button>
+                <button class="settings-tab" onclick="openSettingsTab('privacy')">🔒 Privacy</button>
+            </div>
+            
+            <!-- Profile Tab -->
+            <div id="settings-profile" class="settings-tab-content active">
+                <h3>Personal Information</h3>
+                <form id="profile-form" onsubmit="saveProfile(event)">
+                    <div class="form-group">
+                        <label for="settings-name">👤 Full Name</label>
+                        <input type="text" id="settings-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-email">📧 Email Address</label>
+                        <input type="email" id="settings-email" readonly>
+                        <small>Email cannot be changed</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-contact">📱 Contact Number</label>
+                        <input type="tel" id="settings-contact" required>
+                    </div>
+                    <div id="settings-specialization-group" class="form-group" style="display: none;">
+                        <label for="settings-specialization">🎓 Specialization</label>
+                        <input type="text" id="settings-specialization">
+                    </div>
+                    <div id="settings-license-group" class="form-group" style="display: none;">
+                        <label for="settings-license">🆔 Medical License Number</label>
+                        <input type="text" id="settings-license">
+                    </div>
+                    <div id="settings-experience-group" class="form-group" style="display: none;">
+                        <label for="settings-experience">💼 Years of Experience</label>
+                        <input type="number" id="settings-experience" min="0" max="50">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-bio">📝 Bio</label>
+                        <textarea id="settings-bio" rows="4"></textarea>
+                        <small id="settings-bio-hint"></small>
+                    </div>
+                    <button type="submit" class="btn-primary">💾 Save Changes</button>
+                </form>
+                <div id="profile-message" class="message" style="margin-top: 1rem;"></div>
+            </div>
+            
+            <!-- Appearance Tab -->
+            <div id="settings-appearance" class="settings-tab-content">
+                <h3>Theme Settings</h3>
+                <div class="settings-option">
+                    <label>
+                        <span>🌓 Theme Mode</span>
+                        <select id="theme-select" onchange="changeTheme(this.value)">
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                            <option value="auto">Auto (System)</option>
+                        </select>
+                    </label>
+                    <small>Choose your preferred theme. Auto will match your system preference.</small>
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="compact-mode" onchange="toggleCompactMode()">
+                        <span>📦 Compact Mode</span>
+                    </label>
+                    <small>Reduce spacing and padding for a more compact layout.</small>
+                </div>
+            </div>
+            
+            <!-- Notifications Tab -->
+            <div id="settings-notifications" class="settings-tab-content">
+                <h3>Notification Preferences</h3>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="notify-consultations" checked>
+                        <span>📞 Consultation Requests</span>
+                    </label>
+                    <small>Get notified when someone requests a consultation.</small>
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="notify-messages" checked>
+                        <span>💬 Chat Messages</span>
+                    </label>
+                    <small>Receive notifications for new chat messages.</small>
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="notify-appointments" checked>
+                        <span>📅 Appointments</span>
+                    </label>
+                    <small>Get reminders for upcoming appointments.</small>
+                </div>
+            </div>
+            
+            <!-- Privacy Tab -->
+            <div id="settings-privacy" class="settings-tab-content">
+                <h3>Privacy Settings</h3>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="profile-visible" checked>
+                        <span>👁️ Profile Visibility</span>
+                    </label>
+                    <small>Allow others to see your profile information.</small>
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="online-status" checked>
+                        <span>🟢 Show Online Status</span>
+                    </label>
+                    <small>Display your online status to others.</small>
+                </div>
+                <div class="settings-option">
+                    <h4>Account Actions</h4>
+                    <button class="btn-secondary" onclick="exportData()">📥 Export My Data</button>
+                    <button class="btn-danger" onclick="deleteAccount()" style="margin-top: 1rem;">🗑️ Delete Account</button>
+                </div>
+            </div>
         </div>
     </div>
 

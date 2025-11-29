@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadConsultationRequests();
     loadConsultationHistory();
     initializeOnlineStatus();
+    initializeTheme();
+    loadSettings();
     
     // Set default dates for medicine form
     const today = new Date().toISOString().split('T')[0];
@@ -1766,6 +1768,8 @@ let callStartTime = null;
 let currentConsultation = null;
 
 async function startVideoCall(consultation) {
+    console.log('🎬 Starting video call for consultation:', consultation.id);
+    
     // Stop polling when call starts
     stopConsultationStatusPolling();
     stopDoctorRequestPolling();
@@ -1791,6 +1795,7 @@ async function startVideoCall(consultation) {
             ended: false
         };
         localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
+        console.log(`✅ Call started with ID: ${currentCallId}`);
     } catch (error) {
         console.log('Failed to start call via API, using localStorage:', error);
         // Fallback to localStorage
@@ -1803,6 +1808,7 @@ async function startVideoCall(consultation) {
         };
         localStorage.setItem('activeCalls', JSON.stringify(activeCalls));
         callIdToUse = currentCallId;
+        console.log(`✅ Call started with fallback ID: ${currentCallId}`);
     }
     
     // Hide dashboards and show video call screen IMMEDIATELY
@@ -1810,11 +1816,16 @@ async function startVideoCall(consultation) {
     document.getElementById('doctor-dashboard').style.display = 'none';
     document.getElementById('video-call-screen').style.display = 'flex';
     
-    // OPTIMIZATION: Start video stream initialization IMMEDIATELY (don't wait for other setup)
-    // This will make local video appear as soon as possible
-    initializeVideoStreams().catch(err => {
-        console.error('Error initializing video streams early:', err);
-    });
+    // CRITICAL: Initialize video streams BEFORE proceeding with other setup
+    // This ensures tracks are ready before WebRTC offer/answer
+    console.log('🎥 Initializing video streams...');
+    try {
+        await initializeVideoStreams();
+        console.log('✅ Video streams initialized successfully');
+    } catch (err) {
+        console.error('❌ Error initializing video streams:', err);
+        // Continue anyway - might be permission issue
+    }
     
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
     
@@ -2037,13 +2048,45 @@ async function startVideoCall(consultation) {
         remoteVideo.muted = false;
     }
     
-    // Video streams already started at the beginning of this function
-    // Only reinitialize if it hasn't started yet (shouldn't happen, but safety check)
-    if (!localStream) {
-        console.log('⚠️ Video stream not started yet, initializing now...');
-        initializeVideoStreams().catch(err => {
+    // Video streams should already be initialized above
+    // Verify we have a local stream before proceeding
+    if (!localStream || localStream.getTracks().length === 0) {
+        console.log('⚠️ Video stream not ready, initializing now...');
+        try {
+            await initializeVideoStreams();
+        } catch (err) {
             console.error('Error initializing video streams:', err);
+        }
+    }
+    
+    // Verify we have tracks before starting WebRTC
+    if (localStream && localStream.getTracks().length > 0) {
+        console.log(`✅ Local stream ready with ${localStream.getTracks().length} track(s) - starting WebRTC connection`);
+        
+        // Create peer connection if it doesn't exist
+        if (!peerConnection) {
+            createPeerConnection();
+        }
+        
+        // Ensure tracks are added to peer connection
+        const existingSenders = peerConnection.getSenders();
+        const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
+        
+        localStream.getTracks().forEach(track => {
+            if (!existingTrackIds.includes(track.id)) {
+                console.log(`📤 Adding ${track.kind} track to peer connection`);
+                try {
+                    peerConnection.addTrack(track, localStream);
+                } catch (err) {
+                    console.error(`Error adding ${track.kind} track:`, err);
+                }
+            }
         });
+        
+        // Start WebRTC connection (doctor creates offer, patient waits)
+        await startWebRTCConnection();
+    } else {
+        console.warn('⚠️ Local stream not ready - WebRTC connection may have issues');
     }
     
     // Start call timer
@@ -2243,8 +2286,8 @@ async function initializeVideoStreams() {
                 console.warn('⚠️ No video tracks in local stream');
             }
             
-            // Start WebRTC connection immediately
-            await startWebRTCConnection();
+            // Note: WebRTC connection will be started from startVideoCall
+            // after all UI setup is complete
         }
         
     } catch (error) {
@@ -2425,19 +2468,52 @@ async function startWebRTCConnection() {
             // Doctor creates offer (caller)
             console.log('📞 Doctor creating offer...');
             
-            // Reduced delay - peer connection should be ready already
-            // Only wait if connection state indicates it needs time
-            if (peerConnection.signalingState === 'stable' && peerConnection.getSenders().length > 0) {
-                // Already ready, proceed immediately
-            } else {
-                // Give a tiny delay for tracks to be added
-                await new Promise(resolve => setTimeout(resolve, 100));
+            // CRITICAL: Ensure local stream and tracks are ready before creating offer
+            if (!localStream || localStream.getTracks().length === 0) {
+                console.log('⚠️ Local stream not ready yet - waiting...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Try again if still not ready
+                if (!localStream || localStream.getTracks().length === 0) {
+                    console.error('❌ Local stream still not ready after wait');
+                    return;
+                }
             }
             
+            // Ensure tracks are added to peer connection
+            const existingSenders = peerConnection.getSenders();
+            const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
+            const localTracks = localStream.getTracks();
+            
+            localTracks.forEach(track => {
+                if (!existingTrackIds.includes(track.id)) {
+                    console.log(`📤 Adding ${track.kind} track to peer connection before offer`);
+                    try {
+                        peerConnection.addTrack(track, localStream);
+                    } catch (err) {
+                        console.error(`Error adding ${track.kind} track:`, err);
+                    }
+                }
+            });
+            
+            // Verify we have tracks
+            const senders = peerConnection.getSenders();
+            console.log(`✅ Peer connection has ${senders.length} senders before creating offer`);
+            
+            // Wait a moment for tracks to be fully added
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Create offer with explicit audio/video
             const offer = await peerConnection.createOffer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: true
             });
+            
+            // Verify offer includes both media types
+            const offerString = JSON.stringify(offer.sdp);
+            const hasAudio = offerString.includes('audio') || offerString.includes('m=audio');
+            const hasVideo = offerString.includes('video') || offerString.includes('m=video');
+            console.log(`📤 Offer created - Audio: ${hasAudio}, Video: ${hasVideo}`);
             
             await peerConnection.setLocalDescription(offer);
             
@@ -2448,10 +2524,18 @@ async function startWebRTCConnection() {
                 offer: offer
             });
             
-            console.log('📤 Offer sent');
+            console.log('📤 Offer sent via Socket.io');
         } else {
             // Patient waits for offer from doctor
             console.log('📥 Patient waiting for offer from doctor...');
+            
+            // Ensure local stream is ready
+            if (!localStream || localStream.getTracks().length === 0) {
+                console.log('⚠️ Patient local stream not ready - initializing...');
+                if (typeof initializeVideoStreams === 'function') {
+                    await initializeVideoStreams();
+                }
+            }
         }
     } catch (error) {
         console.error('Error creating offer:', error);
@@ -3158,6 +3242,11 @@ window.onclick = function(event) {
     if (event.target === medicineInfoModal) {
         closeMedicineInfoModal();
     }
+    
+    const settingsModal = document.getElementById('settings-modal');
+    if (event.target === settingsModal) {
+        closeSettings();
+    }
 }
 
 // ========================================
@@ -3424,5 +3513,335 @@ function closeMedicineInfoModal() {
     if (input) {
         input.value = '';
     }
+}
+
+// ========================================
+// SETTINGS & THEME FUNCTIONALITY
+// ========================================
+
+// Initialize theme on page load
+function initializeTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    const themeMode = localStorage.getItem('themeMode') || 'light';
+    
+    if (themeMode === 'auto') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.body.classList.toggle('dark-mode', prefersDark);
+        updateThemeIcon(prefersDark);
+    } else {
+        const isDark = themeMode === 'dark';
+        document.body.classList.toggle('dark-mode', isDark);
+        updateThemeIcon(isDark);
+    }
+    
+    // Update theme select dropdown
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+        themeSelect.value = themeMode;
+    }
+    
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (themeMode === 'auto') {
+            document.body.classList.toggle('dark-mode', e.matches);
+            updateThemeIcon(e.matches);
+        }
+    });
+}
+
+// Toggle theme manually
+function toggleTheme() {
+    const isDark = document.body.classList.contains('dark-mode');
+    document.body.classList.toggle('dark-mode', !isDark);
+    updateThemeIcon(!isDark);
+    localStorage.setItem('theme', !isDark ? 'dark' : 'light');
+    localStorage.setItem('themeMode', !isDark ? 'dark' : 'light');
+    
+    // Update theme select dropdown
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+        themeSelect.value = !isDark ? 'dark' : 'light';
+    }
+}
+
+// Change theme mode (light/dark/auto)
+function changeTheme(mode) {
+    localStorage.setItem('themeMode', mode);
+    
+    if (mode === 'auto') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.body.classList.toggle('dark-mode', prefersDark);
+        updateThemeIcon(prefersDark);
+    } else {
+        const isDark = mode === 'dark';
+        document.body.classList.toggle('dark-mode', isDark);
+        updateThemeIcon(isDark);
+    }
+}
+
+// Update theme icon
+function updateThemeIcon(isDark) {
+    const themeIcon = document.getElementById('theme-icon');
+    if (themeIcon) {
+        themeIcon.textContent = isDark ? '☀️' : '🌙';
+    }
+}
+
+// Open settings modal
+function openSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.style.display = 'block';
+        loadProfileData();
+        loadSettings();
+    }
+}
+
+// Close settings modal
+function closeSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Switch settings tabs
+function openSettingsTab(tabName) {
+    // Hide all tab contents
+    const tabContents = document.querySelectorAll('.settings-tab-content');
+    tabContents.forEach(content => content.classList.remove('active'));
+    
+    // Remove active class from all tabs
+    const tabs = document.querySelectorAll('.settings-tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    // Show selected tab content
+    const selectedContent = document.getElementById(`settings-${tabName}`);
+    if (selectedContent) {
+        selectedContent.classList.add('active');
+    }
+    
+    // Activate selected tab button
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        // Fallback: find tab button by content
+        tabs.forEach(tab => {
+            if (tab.textContent.toLowerCase().includes(tabName.toLowerCase().slice(0, 3))) {
+                tab.classList.add('active');
+            }
+        });
+    }
+}
+
+// Load profile data into settings form
+function loadProfileData() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData || !userData.user_data) return;
+    
+    const userInfo = userData.user_data;
+    const userType = userData.user_type;
+    
+    // Fill form fields
+    const nameInput = document.getElementById('settings-name');
+    const emailInput = document.getElementById('settings-email');
+    const contactInput = document.getElementById('settings-contact');
+    const bioInput = document.getElementById('settings-bio');
+    
+    if (nameInput) nameInput.value = userInfo.name || '';
+    if (emailInput) emailInput.value = userData.email || '';
+    if (contactInput) contactInput.value = userInfo.contact || '';
+    if (bioInput) bioInput.value = userInfo.bio || '';
+    
+    // Show/hide doctor-specific fields
+    if (userType === 'Doctor') {
+        const specGroup = document.getElementById('settings-specialization-group');
+        const licenseGroup = document.getElementById('settings-license-group');
+        const expGroup = document.getElementById('settings-experience-group');
+        const bioHint = document.getElementById('settings-bio-hint');
+        
+        if (specGroup) {
+            specGroup.style.display = 'block';
+            const specInput = document.getElementById('settings-specialization');
+            if (specInput) specInput.value = userInfo.specialization || '';
+        }
+        if (licenseGroup) {
+            licenseGroup.style.display = 'block';
+            const licenseInput = document.getElementById('settings-license');
+            if (licenseInput) licenseInput.value = userInfo.license || '';
+        }
+        if (expGroup) {
+            expGroup.style.display = 'block';
+            const expInput = document.getElementById('settings-experience');
+            if (expInput) expInput.value = userInfo.experience || 0;
+        }
+        if (bioHint) bioHint.textContent = 'Professional background and expertise';
+    } else {
+        const specGroup = document.getElementById('settings-specialization-group');
+        const licenseGroup = document.getElementById('settings-license-group');
+        const expGroup = document.getElementById('settings-experience-group');
+        const bioHint = document.getElementById('settings-bio-hint');
+        
+        if (specGroup) specGroup.style.display = 'none';
+        if (licenseGroup) licenseGroup.style.display = 'none';
+        if (expGroup) expGroup.style.display = 'none';
+        if (bioHint) bioHint.textContent = 'Age, gender, medical history, allergies, etc.';
+    }
+}
+
+// Save profile changes
+async function saveProfile(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const userType = userData.user_type;
+    const messageDiv = document.getElementById('profile-message');
+    
+    // Get form values
+    const updatedData = {
+        name: document.getElementById('settings-name').value,
+        contact: document.getElementById('settings-contact').value,
+        bio: document.getElementById('settings-bio').value
+    };
+    
+    if (userType === 'Doctor') {
+        updatedData.specialization = document.getElementById('settings-specialization').value;
+        updatedData.license = document.getElementById('settings-license').value;
+        updatedData.experience = parseInt(document.getElementById('settings-experience').value) || 0;
+    }
+    
+    // Merge with existing user data
+    const mergedUserData = {
+        ...userData.user_data,
+        ...updatedData
+    };
+    
+    // Update in sessionStorage
+    userData.user_data = mergedUserData;
+    sessionStorage.setItem('currentUser', JSON.stringify(userData));
+    
+    // Update in localStorage usersDB
+    const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    if (usersDB[userData.email]) {
+        usersDB[userData.email].user_data = mergedUserData;
+        localStorage.setItem('usersDB', JSON.stringify(usersDB));
+    }
+    
+    // Update on server via Socket.io
+    if (typeof socket !== 'undefined' && socket && socket.connected) {
+        socket.emit('userOnline', {
+            email: userData.email,
+            userData: mergedUserData,
+            userType: userType
+        });
+    }
+    
+    // Show success message
+    if (messageDiv) {
+        messageDiv.innerHTML = '<div class="success-message">✅ Profile updated successfully!</div>';
+        setTimeout(() => {
+            messageDiv.innerHTML = '';
+        }, 3000);
+    }
+    
+    // Reload dashboard to reflect changes
+    setTimeout(() => {
+        loadDashboard();
+    }, 500);
+}
+
+// Load settings preferences
+function loadSettings() {
+    // Load notification preferences
+    const notifyConsultations = localStorage.getItem('notifyConsultations') !== 'false';
+    const notifyMessages = localStorage.getItem('notifyMessages') !== 'false';
+    const notifyAppointments = localStorage.getItem('notifyAppointments') !== 'false';
+    
+    const consultationsCheck = document.getElementById('notify-consultations');
+    const messagesCheck = document.getElementById('notify-messages');
+    const appointmentsCheck = document.getElementById('notify-appointments');
+    
+    if (consultationsCheck) consultationsCheck.checked = notifyConsultations;
+    if (messagesCheck) messagesCheck.checked = notifyMessages;
+    if (appointmentsCheck) appointmentsCheck.checked = notifyAppointments;
+    
+    // Load privacy settings
+    const profileVisible = localStorage.getItem('profileVisible') !== 'false';
+    const onlineStatus = localStorage.getItem('onlineStatus') !== 'false';
+    
+    const profileVisibleCheck = document.getElementById('profile-visible');
+    const onlineStatusCheck = document.getElementById('online-status');
+    
+    if (profileVisibleCheck) profileVisibleCheck.checked = profileVisible;
+    if (onlineStatusCheck) onlineStatusCheck.checked = onlineStatus;
+    
+    // Save notification preferences when changed
+    if (consultationsCheck) {
+        consultationsCheck.addEventListener('change', (e) => {
+            localStorage.setItem('notifyConsultations', e.target.checked);
+        });
+    }
+    if (messagesCheck) {
+        messagesCheck.addEventListener('change', (e) => {
+            localStorage.setItem('notifyMessages', e.target.checked);
+        });
+    }
+    if (appointmentsCheck) {
+        appointmentsCheck.addEventListener('change', (e) => {
+            localStorage.setItem('notifyAppointments', e.target.checked);
+        });
+    }
+    
+    // Save privacy settings when changed
+    if (profileVisibleCheck) {
+        profileVisibleCheck.addEventListener('change', (e) => {
+            localStorage.setItem('profileVisible', e.target.checked);
+        });
+    }
+    if (onlineStatusCheck) {
+        onlineStatusCheck.addEventListener('change', (e) => {
+            localStorage.setItem('onlineStatus', e.target.checked);
+        });
+    }
+}
+
+// Toggle compact mode
+function toggleCompactMode() {
+    const isCompact = document.getElementById('compact-mode').checked;
+    document.body.classList.toggle('compact-mode', isCompact);
+    localStorage.setItem('compactMode', isCompact);
+}
+
+// Export user data
+function exportData() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const dataStr = JSON.stringify(userData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `healthcare-portal-data-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+// Delete account
+function deleteAccount() {
+    if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+        return;
+    }
+    
+    if (!confirm('This will permanently delete all your data. Type "DELETE" to confirm.')) {
+        return;
+    }
+    
+    // In a real app, this would call a server API to delete the account
+    alert('Account deletion feature would be implemented with server-side API call.');
+    // For now, just log out
+    logout();
 }
 

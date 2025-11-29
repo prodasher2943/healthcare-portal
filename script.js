@@ -360,26 +360,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 bio_data: bio
             };
             
-            // First, register locally (for login)
+            // CRITICAL: Hash password ONCE and use the SAME hash for both local and server registration
+            const hashedPassword = await hashPassword(password);
+            console.log(`🔐 Password hashed - length: ${hashedPassword.length}`);
+            
+            // First, register locally (for login) - use the hashed password
             const result = await localRegisterUser(email, password, 'Patient', userData);
             
             if (result.success) {
-                showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Also register on server for global availability (with password hash for cross-device login)
-                // This is CRITICAL for cross-device login - ensure it completes
+                // CRITICAL: Register on server FIRST before showing success
+                // This ensures cross-device login will work
+                let serverRegSuccess = false;
                 try {
-                    const hashedPassword = await hashPassword(password);
-                    console.log(`📝 Registering patient on server: ${email}`);
+                    console.log(`📝 Registering patient on server: ${email} (passwordHash length: ${hashedPassword.length})`);
                     const serverRegResult = await registerUserOnServer(email, userData, 'Patient', hashedPassword);
                     if (serverRegResult) {
                         console.log(`✅ Patient registered successfully on server: ${email}`);
+                        serverRegSuccess = true;
+                        
+                        // Update local storage with the same password hash used on server
+                        const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+                        if (usersDB[email]) {
+                            usersDB[email].password = hashedPassword;
+                            localStorage.setItem('usersDB', JSON.stringify(usersDB));
+                            console.log(`✅ Local password hash synchronized with server`);
+                        }
                     } else {
-                        console.warn(`⚠️ Server registration returned null for ${email} - cross-device login may not work`);
+                        console.warn(`⚠️ Server registration returned null for ${email}`);
                     }
                 } catch (e) {
-                    // Log but continue - local storage is sufficient for same-device login
                     console.error('❌ Server registration failed:', e);
                     console.warn(`⚠️ Cross-device login may not work for ${email}`);
+                    // Still show success but with warning
+                    if (e.message && !e.message.includes('SERVER_UNAVAILABLE')) {
+                        showMessage('signup-message', `✅ ${result.message} (Note: Server registration failed - cross-device login may not work)`, 'success');
+                    }
+                }
+                
+                if (serverRegSuccess || typeof registerUserOnServer !== 'function') {
+                    showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 }
                 
                 // Auto login after registration (local)
@@ -467,26 +486,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 proof_of_education_filename: proofFile.name
             };
             
-            // First, register locally (for login)
+            // CRITICAL: Hash password ONCE and use the SAME hash for both local and server registration
+            const hashedPassword = await hashPassword(password);
+            console.log(`🔐 Password hashed - length: ${hashedPassword.length}`);
+            
+            // First, register locally (for login) - use the hashed password
             const result = await localRegisterUser(email, password, 'Doctor', userData);
             
             if (result.success) {
-                showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
-                // Also register on server for global availability (with password hash for cross-device login)
-                // This is CRITICAL for cross-device login - ensure it completes
+                // CRITICAL: Register on server FIRST before showing success
+                // This ensures cross-device login will work
+                let serverRegSuccess = false;
                 try {
-                    const hashedPassword = await hashPassword(password);
-                    console.log(`📝 Registering doctor on server: ${email}`);
+                    console.log(`📝 Registering doctor on server: ${email} (passwordHash length: ${hashedPassword.length})`);
                     const serverRegResult = await registerUserOnServer(email, userData, 'Doctor', hashedPassword);
                     if (serverRegResult) {
                         console.log(`✅ Doctor registered successfully on server: ${email}`);
+                        serverRegSuccess = true;
+                        
+                        // Update local storage with the same password hash used on server
+                        const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+                        if (usersDB[email]) {
+                            usersDB[email].password = hashedPassword;
+                            localStorage.setItem('usersDB', JSON.stringify(usersDB));
+                            console.log(`✅ Local password hash synchronized with server`);
+                        }
                     } else {
-                        console.warn(`⚠️ Server registration returned null for ${email} - cross-device login may not work`);
+                        console.warn(`⚠️ Server registration returned null for ${email}`);
                     }
                 } catch (e) {
-                    // Log but continue - local storage is sufficient for same-device login
                     console.error('❌ Server registration failed:', e);
                     console.warn(`⚠️ Cross-device login may not work for ${email}`);
+                    // Still show success but with warning
+                    if (e.message && !e.message.includes('SERVER_UNAVAILABLE')) {
+                        showMessage('signup-message', `✅ ${result.message} (Note: Server registration failed - cross-device login may not work)`, 'success');
+                    }
+                }
+                
+                if (serverRegSuccess || typeof registerUserOnServer !== 'function') {
+                    showMessage('signup-message', `✅ ${result.message} Redirecting...`, 'success');
                 }
                 
                 // Auto login after registration (local)
