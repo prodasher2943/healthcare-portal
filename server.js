@@ -291,21 +291,91 @@ io.on('connection', (socket) => {
     
     // Real-time prescription updates
     socket.on('prescriptionUpdate', ({ callId, prescription, consultationId }) => {
+        console.log('📝 Prescription update received:', { callId, consultationId, prescriptionLength: prescription?.length || 0 });
+        
         // Store prescription in active call
-        if (activeCalls[callId]) {
+        if (callId && activeCalls[callId]) {
             activeCalls[callId].prescription = prescription;
             activeCalls[callId].prescriptionUpdatedAt = new Date().toISOString();
         }
         
+        // Find call by consultationId if callId doesn't match
+        if (consultationId) {
+            for (const [existingCallId, call] of Object.entries(activeCalls)) {
+                if (call.consultationId === parseInt(consultationId) || call.consultationId === consultationId) {
+                    call.prescription = prescription;
+                    call.prescriptionUpdatedAt = new Date().toISOString();
+                    if (!callId) callId = existingCallId;
+                    break;
+                }
+            }
+        }
+        
         // Also store in consultation for persistence
-        const consultation = consultations.find(c => c.id === parseInt(consultationId));
+        const consultation = consultations.find(c => 
+            c.id === parseInt(consultationId) || 
+            c.id === consultationId ||
+            String(c.id) === String(consultationId)
+        );
         if (consultation) {
             consultation.prescription = prescription;
             consultation.prescriptionUpdatedAt = new Date().toISOString();
         }
         
         // Broadcast to all connected clients in this call
-        io.emit('prescriptionUpdated', { callId, consultationId, prescription });
+        console.log('📢 Broadcasting prescription update:', { callId, consultationId });
+        io.emit('prescriptionUpdated', { 
+            callId: callId || consultationId, 
+            consultationId: consultationId || parseInt(consultationId), 
+            prescription: prescription || '' 
+        });
+    });
+    
+    // WebRTC Signaling Handlers
+    
+    // Handle WebRTC offer - relay to the other party
+    socket.on('webrtcOffer', ({ callId, consultationId, offer }) => {
+        console.log('📥 WebRTC offer received:', { callId, consultationId });
+        
+        // Find all sockets in this call and relay to others
+        const targetConsultationId = consultationId || callId;
+        
+        // Relay to all other connected clients in this call
+        socket.broadcast.emit('webrtcOffer', {
+            callId: callId,
+            consultationId: targetConsultationId,
+            offer: offer
+        });
+    });
+    
+    // Handle WebRTC answer - relay to the other party
+    socket.on('webrtcAnswer', ({ callId, consultationId, answer }) => {
+        console.log('📥 WebRTC answer received:', { callId, consultationId });
+        
+        // Find all sockets in this call and relay to others
+        const targetConsultationId = consultationId || callId;
+        
+        // Relay to all other connected clients in this call
+        socket.broadcast.emit('webrtcAnswer', {
+            callId: callId,
+            consultationId: targetConsultationId,
+            answer: answer
+        });
+    });
+    
+    // Handle ICE candidate - relay to the other party
+    socket.on('iceCandidate', ({ callId, consultationId, candidate }) => {
+        console.log('🧊 ICE candidate received:', { callId, consultationId });
+        
+        // Find all sockets in this call and relay to others
+        const targetConsultationId = consultationId || callId;
+        
+        // Relay to all other connected clients in this call
+        socket.broadcast.emit('iceCandidate', {
+            callId: callId,
+            consultationId: targetConsultationId,
+            candidate: candidate
+        });
     });
 });
 

@@ -958,15 +958,18 @@ async function loadAvailableDoctors() {
                 ${availableDoctors.map(doctor => {
                     const hasConsulted = consultedDoctors.has(doctor.email);
                     const isOnline = onlineDoctors.has(doctor.email);
+                    const doctorName = (doctor.user_data && doctor.user_data.name) ? doctor.user_data.name : 'Unknown Doctor';
+                    const specialization = (doctor.user_data && doctor.user_data.specialization) ? doctor.user_data.specialization : 'N/A';
+                    const experience = (doctor.user_data && doctor.user_data.experience) ? doctor.user_data.experience : 0;
                     return `
                         <div class="doctor-card">
                             <div class="doctor-card-header">
-                                <h4>Dr. ${doctor.user_data.name}</h4>
+                                <h4>Dr. ${doctorName}</h4>
                                 ${isOnline ? '<span class="online-badge">🟢 Online</span>' : ''}
                                 ${hasConsulted ? '<span class="consulted-badge">✓ Consulted</span>' : ''}
                             </div>
-                            <p><strong>Specialization:</strong> ${doctor.user_data.specialization}</p>
-                            <p><strong>Experience:</strong> ${doctor.user_data.experience} years</p>
+                            <p><strong>Specialization:</strong> ${specialization}</p>
+                            <p><strong>Experience:</strong> ${experience} years</p>
                             <button class="btn-primary" onclick="requestConsultation('${doctor.email}')">Request Consultation</button>
                         </div>
                     `;
@@ -1707,34 +1710,40 @@ async function startVideoCall(consultation) {
     
     if (isDoctor) {
         // Doctor can edit prescription
-        prescriptionTextarea.removeAttribute('readonly');
-        prescriptionTextarea.placeholder = 'Write prescription here... (Updates in real-time for patient)';
-        prescriptionActions.style.display = 'flex';
-        prescriptionNotice.style.display = 'none';
-        
-        // Load existing prescription if any
-        if (consultation.prescription) {
-            prescriptionTextarea.value = consultation.prescription;
-        } else {
-            prescriptionTextarea.value = '';
+        if (prescriptionTextarea) {
+            prescriptionTextarea.removeAttribute('readonly');
+            prescriptionTextarea.placeholder = 'Write prescription here... (Updates in real-time for patient)';
+            // oninput attribute in HTML already calls onPrescriptionChange, no need to add listener
+            
+            if (prescriptionActions) prescriptionActions.style.display = 'flex';
+            if (prescriptionNotice) prescriptionNotice.style.display = 'none';
+            
+            // Load existing prescription if any
+            if (consultation.prescription) {
+                prescriptionTextarea.value = consultation.prescription;
+            } else {
+                prescriptionTextarea.value = '';
+            }
         }
     } else {
         // Patient can only view prescription
-        prescriptionTextarea.setAttribute('readonly', 'true');
-        prescriptionTextarea.placeholder = 'Prescription will appear here when the doctor writes it...';
-        prescriptionActions.style.display = 'none';
-        
-        // Load existing prescription if any
-        if (consultation.prescription) {
-            prescriptionTextarea.value = consultation.prescription;
-            prescriptionNotice.style.display = 'none';
-        } else {
-            prescriptionTextarea.value = '';
-            prescriptionNotice.style.display = 'block';
+        if (prescriptionTextarea) {
+            prescriptionTextarea.setAttribute('readonly', 'true');
+            prescriptionTextarea.placeholder = 'Prescription will appear here when the doctor writes it...';
+            if (prescriptionActions) prescriptionActions.style.display = 'none';
+            
+            // Load existing prescription if any
+            if (consultation.prescription) {
+                prescriptionTextarea.value = consultation.prescription;
+                if (prescriptionNotice) prescriptionNotice.style.display = 'none';
+            } else {
+                prescriptionTextarea.value = '';
+                if (prescriptionNotice) prescriptionNotice.style.display = 'block';
+            }
         }
     }
     
-    // Initialize video streams (placeholder for now - WebRTC can be added later)
+    // Initialize video streams with WebRTC
     initializeVideoStreams();
     
     // Start call timer
@@ -1806,39 +1815,192 @@ function stopCallEndPolling() {
     }
 }
 
-// Initialize video streams (placeholder - WebRTC can be added later)
-function initializeVideoStreams() {
-    // Request user media for local video
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then(stream => {
-                const localVideo = document.getElementById('local-video');
-                if (localVideo) {
-                    localVideo.srcObject = stream;
-                    localVideo.play().catch(err => console.log('Video play error:', err));
-                    
-                    // Hide placeholder when video starts
-                    const placeholder = document.getElementById('local-video-placeholder');
-                    if (placeholder) placeholder.style.display = 'none';
-                    
-                    // Mark video box as active
-                    const localVideoBox = document.getElementById('local-video-box');
-                    if (localVideoBox) {
-                        localVideoBox.setAttribute('data-video-active', 'true');
-                    }
+// WebRTC Variables
+let localStream = null;
+let peerConnection = null;
+let remoteStream = null;
+const pcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
+
+// Initialize video streams with WebRTC
+async function initializeVideoStreams() {
+    try {
+        // Request user media
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user'
+            }, 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+            }
+        });
+        
+        // Display local video
+        const localVideo = document.getElementById('local-video');
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+            localVideo.muted = true; // Mute local to avoid feedback
+            await localVideo.play().catch(err => console.log('Local video play error:', err));
+            
+            // Hide placeholder
+            const placeholder = document.getElementById('local-video-placeholder');
+            if (placeholder) placeholder.style.display = 'none';
+            
+            // Mark as active
+            const localVideoBox = document.getElementById('local-video-box');
+            if (localVideoBox) {
+                localVideoBox.setAttribute('data-video-active', 'true');
+            }
+        }
+        
+        // Create peer connection
+        if (!peerConnection) {
+            createPeerConnection();
+        }
+        
+        // Add local stream tracks to peer connection
+        if (peerConnection) {
+            localStream.getTracks().forEach(track => {
+                // Remove existing track if any
+                const senders = peerConnection.getSenders();
+                const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+                if (existingSender) {
+                    peerConnection.removeTrack(existingSender);
                 }
-            })
-            .catch(error => {
-                console.log('Could not access camera/microphone:', error);
-                // Continue without video - user can still use the call
-                // Show a message that video is unavailable
-                const placeholder = document.getElementById('local-video-placeholder');
-                if (placeholder) {
-                    placeholder.querySelector('p').textContent = 'Camera unavailable';
-                }
+                // Add new track
+                peerConnection.addTrack(track, localStream);
             });
-    } else {
-        console.log('getUserMedia not supported in this browser');
+            
+            // Start WebRTC connection
+            await startWebRTCConnection();
+        }
+        
+    } catch (error) {
+        console.error('Error initializing video streams:', error);
+        const placeholder = document.getElementById('local-video-placeholder');
+        if (placeholder) {
+            const pTag = placeholder.querySelector('p');
+            if (pTag) {
+                pTag.textContent = 'Camera unavailable - Please allow camera/microphone access';
+            }
+        }
+    }
+}
+
+// Create RTCPeerConnection
+function createPeerConnection() {
+    peerConnection = new RTCPeerConnection(pcConfig);
+    
+    // Handle remote stream
+    peerConnection.ontrack = (event) => {
+        console.log('📹 Received remote track');
+        remoteStream = event.streams[0];
+        
+        // Display remote video
+        const remoteVideo = document.getElementById('remote-video');
+        if (remoteVideo) {
+            remoteVideo.srcObject = remoteStream;
+            remoteVideo.play().catch(err => console.log('Remote video play error:', err));
+            
+            // Hide placeholder
+            const remoteVideoPlaceholder = document.getElementById('remote-video-placeholder');
+            if (remoteVideoPlaceholder) remoteVideoPlaceholder.style.display = 'none';
+            
+            // Mark as active
+            const remoteVideoBox = document.getElementById('remote-video-box');
+            if (remoteVideoBox) {
+                remoteVideoBox.setAttribute('data-video-active', 'true');
+            }
+        }
+    };
+    
+    // Handle ICE candidates
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            console.log('🧊 Sending ICE candidate');
+            if (typeof socket !== 'undefined' && socket && socket.connected) {
+                socket.emit('iceCandidate', {
+                    callId: currentCallId,
+                    consultationId: currentConsultation ? currentConsultation.id : null,
+                    candidate: event.candidate
+                });
+            }
+        }
+    };
+    
+    // Handle connection state changes
+    peerConnection.onconnectionstatechange = () => {
+        console.log('🔌 Peer connection state:', peerConnection.connectionState);
+        
+        if (peerConnection.connectionState === 'connected') {
+            console.log('✅ WebRTC connected!');
+        } else if (peerConnection.connectionState === 'disconnected' || 
+                   peerConnection.connectionState === 'failed') {
+            console.log('❌ WebRTC connection lost');
+        }
+    };
+    
+    // Handle ICE connection state
+    peerConnection.oniceconnectionstatechange = () => {
+        console.log('🧊 ICE connection state:', peerConnection.iceConnectionState);
+    };
+}
+
+// Start WebRTC connection - create offer or wait for offer
+async function startWebRTCConnection() {
+    if (!peerConnection || !currentCallId) {
+        console.log('⚠️ Cannot start WebRTC - missing prerequisites');
+        return;
+    }
+    
+    // Wait a bit for socket connection if not ready
+    if (!socket || !socket.connected) {
+        console.log('⏳ Waiting for socket connection...');
+        setTimeout(() => startWebRTCConnection(), 1000);
+        return;
+    }
+    
+    // Get user data to determine who initiated the call
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    const isDoctor = userData && (userData.user_type === 'Doctor' || userData.user_type?.toLowerCase() === 'doctor');
+    
+    try {
+        if (isDoctor) {
+            // Doctor creates offer (caller)
+            console.log('📞 Doctor creating offer...');
+            
+            // Wait a moment to ensure peer connection is fully set up
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const offer = await peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
+            await peerConnection.setLocalDescription(offer);
+            
+            // Send offer via Socket.io
+            socket.emit('webrtcOffer', {
+                callId: currentCallId,
+                consultationId: currentConsultation ? currentConsultation.id : null,
+                offer: offer
+            });
+            
+            console.log('📤 Offer sent');
+        } else {
+            // Patient waits for offer from doctor
+            console.log('📥 Patient waiting for offer from doctor...');
+        }
+    } catch (error) {
+        console.error('Error creating offer:', error);
     }
 }
 
@@ -1873,9 +2035,17 @@ function stopCallTimer() {
 let prescriptionDebounceTimer = null;
 
 function onPrescriptionChange() {
-    if (!currentCallId || !currentConsultation) return;
+    if (!currentCallId || !currentConsultation) {
+        console.log('⚠️ Cannot update prescription - no active call:', { currentCallId, currentConsultation });
+        return;
+    }
     
     const prescriptionTextarea = document.getElementById('prescription-textarea');
+    if (!prescriptionTextarea) {
+        console.log('⚠️ Prescription textarea not found');
+        return;
+    }
+    
     const prescription = prescriptionTextarea.value;
     
     // Debounce to avoid too many updates
@@ -1886,13 +2056,25 @@ function onPrescriptionChange() {
     prescriptionDebounceTimer = setTimeout(() => {
         // Send prescription update via Socket.io
         if (typeof socket !== 'undefined' && socket && socket.connected) {
+            console.log('📤 Sending prescription update:', {
+                callId: currentCallId,
+                consultationId: currentConsultation.id,
+                length: prescription.length
+            });
+            
             socket.emit('prescriptionUpdate', {
                 callId: currentCallId,
                 consultationId: currentConsultation.id,
                 prescription: prescription
             });
+        } else {
+            console.log('⚠️ Socket not connected, cannot send prescription update');
+            // Try to reconnect socket
+            if (typeof initSocket === 'function') {
+                initSocket();
+            }
         }
-    }, 500); // Wait 500ms after user stops typing
+    }, 300); // Wait 300ms after user stops typing
 }
 
 function clearPrescription() {
@@ -1940,12 +2122,72 @@ async function savePrescription() {
     }
 }
 
-async function endVideoCall() {
-    // Stop video streams
-    const localVideo = document.getElementById('local-video');
-    if (localVideo && localVideo.srcObject) {
-        localVideo.srcObject.getTracks().forEach(track => track.stop());
+// Cleanup WebRTC connections
+function cleanupWebRTC() {
+    // Close peer connection
+    if (peerConnection) {
+        peerConnection.ontrack = null;
+        peerConnection.onicecandidate = null;
+        peerConnection.onconnectionstatechange = null;
+        peerConnection.oniceconnectionstatechange = null;
+        
+        // Close all tracks
+        peerConnection.getSenders().forEach(sender => {
+            if (sender.track) {
+                sender.track.stop();
+            }
+        });
+        
+        peerConnection.getReceivers().forEach(receiver => {
+            if (receiver.track) {
+                receiver.track.stop();
+            }
+        });
+        
+        peerConnection.close();
+        peerConnection = null;
     }
+    
+    // Stop local stream
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    // Stop remote stream
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+        remoteStream = null;
+    }
+    
+    // Clear video elements
+    const localVideo = document.getElementById('local-video');
+    if (localVideo) {
+        if (localVideo.srcObject) {
+            localVideo.srcObject.getTracks().forEach(track => track.stop());
+        }
+        localVideo.srcObject = null;
+    }
+    
+    const remoteVideo = document.getElementById('remote-video');
+    if (remoteVideo) {
+        if (remoteVideo.srcObject) {
+            remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+        }
+        remoteVideo.srcObject = null;
+    }
+    
+    // Reset placeholders
+    const localPlaceholder = document.getElementById('local-video-placeholder');
+    if (localPlaceholder) localPlaceholder.style.display = 'flex';
+    
+    const remotePlaceholder = document.getElementById('remote-video-placeholder');
+    if (remotePlaceholder) remotePlaceholder.style.display = 'flex';
+}
+
+async function endVideoCall() {
+    // Cleanup WebRTC connections
+    cleanupWebRTC();
     
     // Stop timer
     stopCallTimer();

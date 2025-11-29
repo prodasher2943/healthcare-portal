@@ -147,28 +147,46 @@ function initSocket() {
         
         // Only update if this is for our current call
         // Match by callId, consultationId, or if they contain each other
-        const isOurCall = (typeof currentCallId !== 'undefined' && currentCallId && 
-                           (currentCallId === callId || 
-                            currentCallId === consultationId ||
-                            (typeof currentCallId === 'string' && currentCallId.includes(String(consultationId))) ||
-                            (typeof callId === 'string' && callId.includes(String(currentCallId))))) ||
-                          (typeof currentConsultation !== 'undefined' && currentConsultation &&
-                           currentConsultation.id === consultationId);
+        const currentCall = typeof currentCallId !== 'undefined' ? currentCallId : null;
+        const currentConsult = typeof currentConsultation !== 'undefined' && currentConsultation ? currentConsultation.id : null;
+        
+        const isOurCall = (currentCall && (
+                           currentCall === callId || 
+                           currentCall === consultationId ||
+                           (typeof currentCall === 'string' && String(currentCall).includes(String(consultationId))) ||
+                           (typeof callId === 'string' && String(callId).includes(String(currentCall))))) ||
+                          (currentConsult && (
+                           currentConsult === consultationId ||
+                           String(currentConsult) === String(consultationId)));
                            
         if (isOurCall) {
             const prescriptionTextarea = document.getElementById('prescription-textarea');
             if (prescriptionTextarea) {
                 // Don't update if doctor is currently typing (to avoid cursor jumping)
-                if (prescriptionTextarea !== document.activeElement) {
+                const isTyping = prescriptionTextarea === document.activeElement;
+                
+                if (!isTyping) {
+                    // Save cursor position if not typing
+                    const oldValue = prescriptionTextarea.value;
+                    const cursorPos = prescriptionTextarea.selectionStart;
+                    
                     prescriptionTextarea.value = prescription || '';
                     
                     // Show/hide notice for patient
                     const prescriptionNotice = document.getElementById('prescription-readonly-notice');
                     if (prescriptionNotice) {
-                        prescriptionNotice.style.display = prescription ? 'none' : 'block';
+                        prescriptionNotice.style.display = (prescription && prescription.trim()) ? 'none' : 'block';
                     }
+                    
+                    console.log('✅ Prescription updated in textarea');
+                } else {
+                    console.log('⚠️ Skipping update - doctor is typing');
                 }
+            } else {
+                console.log('⚠️ Prescription textarea not found');
             }
+        } else {
+            console.log('⚠️ Prescription update not for current call:', { currentCall, currentConsult, callId, consultationId });
         }
     });
     
@@ -191,6 +209,100 @@ function initSocket() {
             const consultationModal = document.getElementById('consultation-modal');
             if (consultationModal && consultationModal.style.display === 'block') {
                 loadAvailableDoctors();
+            }
+        }
+    });
+    
+    // WebRTC Signaling Handlers
+    socket.on('webrtcOffer', async ({ callId, consultationId, offer }) => {
+        console.log('📥 Received WebRTC offer:', { callId, consultationId });
+        
+        // Check if this is for our current call
+        const isOurCall = (typeof currentCallId !== 'undefined' && currentCallId && 
+                          (currentCallId === callId || currentCallId === consultationId ||
+                           String(currentCallId).includes(String(callId)) || String(currentCallId).includes(String(consultationId)))) ||
+                         (typeof currentConsultation !== 'undefined' && currentConsultation &&
+                          (currentConsultation.id === consultationId || currentConsultation.id === callId ||
+                           String(currentConsultation.id) === String(consultationId) || String(currentConsultation.id) === String(callId)));
+        
+        if (isOurCall) {
+            // If peer connection doesn't exist yet, create it
+            if (typeof peerConnection === 'undefined' || !peerConnection) {
+                console.log('⚠️ Peer connection not ready, creating now...');
+                if (typeof createPeerConnection === 'function') {
+                    createPeerConnection();
+                    
+                    // Add local stream tracks if available
+                    if (typeof localStream !== 'undefined' && localStream) {
+                        localStream.getTracks().forEach(track => {
+                            peerConnection.addTrack(track, localStream);
+                        });
+                    }
+                } else {
+                    console.error('⚠️ createPeerConnection function not available');
+                    return;
+                }
+            }
+            
+            try {
+                // Set remote description
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                console.log('✅ Remote description set');
+                
+                // Create answer
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Send answer back
+                socket.emit('webrtcAnswer', {
+                    callId: callId || currentCallId,
+                    consultationId: consultationId || (currentConsultation ? currentConsultation.id : null),
+                    answer: answer
+                });
+                
+                console.log('📤 Answer sent');
+            } catch (error) {
+                console.error('Error handling WebRTC offer:', error);
+            }
+        } else {
+            console.log('⚠️ Offer not for current call, ignoring');
+        }
+    });
+    
+    socket.on('webrtcAnswer', async ({ callId, consultationId, answer }) => {
+        console.log('📥 Received WebRTC answer:', { callId, consultationId });
+        
+        // Check if this is for our current call
+        const isOurCall = (typeof currentCallId !== 'undefined' && currentCallId && 
+                          (currentCallId === callId || currentCallId === consultationId)) ||
+                         (typeof currentConsultation !== 'undefined' && currentConsultation &&
+                          (currentConsultation.id === consultationId || currentConsultation.id === callId));
+        
+        if (isOurCall && typeof peerConnection !== 'undefined' && peerConnection) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log('✅ Remote description set (answer)');
+            } catch (error) {
+                console.error('Error handling WebRTC answer:', error);
+            }
+        }
+    });
+    
+    socket.on('iceCandidate', async ({ callId, consultationId, candidate }) => {
+        console.log('🧊 Received ICE candidate:', { callId, consultationId });
+        
+        // Check if this is for our current call
+        const isOurCall = (typeof currentCallId !== 'undefined' && currentCallId && 
+                          (currentCallId === callId || currentCallId === consultationId)) ||
+                         (typeof currentConsultation !== 'undefined' && currentConsultation &&
+                          (currentConsultation.id === consultationId || currentConsultation.id === callId));
+        
+        if (isOurCall && typeof peerConnection !== 'undefined' && peerConnection) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('✅ ICE candidate added');
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
             }
         }
     });
