@@ -3423,12 +3423,9 @@ async function endVideoCall() {
         setTimeout(() => {
             loadMedicineSchedule();
         }, 1000);
-    }
-    
-    // Show review modal for patients after consultation ends
-    if (savedConsultationId && savedDoctorEmail) {
-        const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
-        if (userData && (userData.user_type === 'Patient' || userData.user_type?.toLowerCase() === 'patient')) {
+        
+        // Show review modal for patients after consultation ends
+        if (savedConsultationId && savedDoctorEmail) {
             setTimeout(() => {
                 showReviewModal(savedConsultationId, savedDoctorEmail);
             }, 1000); // Show after 1 second
@@ -3436,7 +3433,6 @@ async function endVideoCall() {
     }
     
     // Reset consultation panel based on current chat state
-    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
     if (userData) {
         const userType = userData.user_type;
         const isPatient = userType === 'Patient' || userType === 'patient' || userType?.toLowerCase() === 'patient';
