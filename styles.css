@@ -3905,33 +3905,46 @@ body.dark-mode * {
     display: flex;
     gap: 0.5rem;
     margin: 1rem 0;
-    padding: 0 1rem;
-    border-bottom: 2px solid #e0e0e0;
+    padding: 0.75rem 1rem;
+    border-bottom: 3px solid #667eea;
+    background: white;
+    backdrop-filter: blur(10px);
+    border-radius: 12px 12px 0 0;
     overflow-x: auto;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
 }
 
 .dashboard-tab {
-    padding: 0.75rem 1.5rem;
-    background: transparent;
-    border: none;
-    border-bottom: 3px solid transparent;
-    color: #666;
+    padding: 0.85rem 1.75rem;
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-radius: 8px 8px 0 0;
+    color: #495057;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .dashboard-tab:hover {
     color: #667eea;
-    background: rgba(102, 126, 234, 0.1);
+    background: #e9ecef;
+    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
 }
 
 .dashboard-tab.active {
-    color: #667eea;
-    border-bottom-color: #667eea;
-    background: rgba(102, 126, 234, 0.05);
+    color: #fff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    border-bottom-color: transparent;
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
+    transform: translateY(-2px);
+    position: relative;
+    z-index: 1;
 }
 
 .patient-tab-content,
@@ -4261,31 +4274,34 @@ body.dark-mode * {
 
 /* Dark Mode for New Features */
 body.dark-mode .dashboard-tabs {
-    border-bottom-color: rgba(124, 138, 255, 0.3);
-    background: rgba(30, 30, 46, 0.95);
+    border-bottom-color: #7c8aff;
+    background: rgba(30, 30, 46, 0.98);
     backdrop-filter: blur(10px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
 }
 
 body.dark-mode .dashboard-tab {
-    color: rgba(232, 232, 232, 0.9);
-    background: rgba(42, 42, 62, 0.8);
-    border-color: rgba(124, 138, 255, 0.2);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    color: #e8e8e8;
+    background: rgba(42, 42, 62, 0.95);
+    border: 2px solid rgba(124, 138, 255, 0.4);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+    font-weight: 700;
 }
 
 body.dark-mode .dashboard-tab:hover {
     color: #fff;
-    background: rgba(124, 138, 255, 0.25);
-    border-color: rgba(124, 138, 255, 0.5);
-    box-shadow: 0 2px 6px rgba(124, 138, 255, 0.3);
+    background: rgba(60, 60, 90, 0.95);
+    border-color: rgba(124, 138, 255, 0.7);
+    box-shadow: 0 3px 8px rgba(124, 138, 255, 0.4);
 }
 
 body.dark-mode .dashboard-tab.active {
     color: #fff;
     background: linear-gradient(135deg, #7c8aff 0%, #9b6eff 100%);
     border-color: #7c8aff;
-    box-shadow: 0 4px 12px rgba(124, 138, 255, 0.5);
+    box-shadow: 0 5px 15px rgba(124, 138, 255, 0.7);
+    position: relative;
+    z-index: 1;
 }
 
 body.dark-mode .appointment-card,
