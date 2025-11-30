@@ -2190,7 +2190,7 @@ const pcConfig = {
     ]
 };
 
-// Initialize video streams with WebRTC
+// Initialize video streams with WebRTC - Gracefully handles missing devices
 async function initializeVideoStreams() {
     // Prevent multiple simultaneous initializations
     if (initializeVideoStreams.inProgress) {
@@ -2201,12 +2201,13 @@ async function initializeVideoStreams() {
     initializeVideoStreams.inProgress = true;
     
     try {
-        // Request user media with initial camera - OPTIMIZED for speed
-        const initialConstraints = {
+        // Strategy: Try to get media with fallback options
+        // First, try both video and audio
+        let constraints = {
             video: { 
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
-                facingMode: 'user' // Start with front camera
+                facingMode: 'user'
             },
             audio: {
                 echoCancellation: true,
@@ -2215,30 +2216,84 @@ async function initializeVideoStreams() {
         };
         
         console.log('🎥 Requesting camera/microphone access...');
-        localStream = await navigator.mediaDevices.getUserMedia(initialConstraints);
-        console.log('✅ Camera/microphone access granted');
+        let stream = null;
         
-        // Display local video IMMEDIATELY - don't wait for device enumeration
-        const localVideo = document.getElementById('local-video');
-        if (localVideo) {
-            localVideo.srcObject = localStream;
-            localVideo.muted = true; // Mute local to avoid feedback
-            localVideo.play().catch(err => console.log('Local video play error:', err));
+        try {
+            // Try to get both video and audio
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('✅ Camera and microphone access granted');
+        } catch (error) {
+            console.warn('⚠️ Could not get both video and audio, trying individual devices...', error.name);
             
-            // Hide placeholder immediately
-            const placeholder = document.getElementById('local-video-placeholder');
-            if (placeholder) placeholder.style.display = 'none';
-            
-            // Mark as active
-            const localVideoBox = document.getElementById('local-video-box');
-            if (localVideoBox) {
-                localVideoBox.setAttribute('data-video-active', 'true');
+            // Fallback 1: Try audio only
+            try {
+                console.log('🎤 Trying audio only...');
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('✅ Audio access granted (no camera)');
+            } catch (audioError) {
+                console.warn('⚠️ Could not get audio either, trying video only...', audioError.name);
+                
+                // Fallback 2: Try video only
+                try {
+                    console.log('📹 Trying video only...');
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    console.log('✅ Video access granted (no microphone)');
+                } catch (videoError) {
+                    console.warn('⚠️ Could not get video either, proceeding without local media...', videoError.name);
+                    
+                    // Fallback 3: Create empty stream and proceed - user can still receive remote video/audio
+                    stream = new MediaStream();
+                    console.log('ℹ️ Proceeding without local camera/microphone - will still receive remote streams');
+                }
             }
-            
-            console.log('✅ Local video displayed immediately');
         }
         
-        // Enumerate devices in parallel (non-blocking) after video is already showing
+        // Set the local stream (even if empty)
+        localStream = stream;
+        
+        // Update UI based on what we got
+        const localVideo = document.getElementById('local-video');
+        const placeholder = document.getElementById('local-video-placeholder');
+        const localVideoBox = document.getElementById('local-video-box');
+        
+        const audioTracks = stream.getAudioTracks();
+        const videoTracks = stream.getVideoTracks();
+        
+        console.log(`📊 Local media state: ${videoTracks.length} video track(s), ${audioTracks.length} audio track(s)`);
+        
+        if (videoTracks.length > 0) {
+            // We have video - display it
+            if (localVideo) {
+                localVideo.srcObject = stream;
+                localVideo.muted = true; // Mute local to avoid feedback
+                localVideo.play().catch(err => console.log('Local video play error:', err));
+                
+                if (placeholder) placeholder.style.display = 'none';
+                if (localVideoBox) {
+                    localVideoBox.setAttribute('data-video-active', 'true');
+                }
+                console.log('✅ Local video displayed');
+            }
+        } else {
+            // No video - show placeholder message
+            if (placeholder) {
+                placeholder.style.display = 'flex';
+                const pTag = placeholder.querySelector('p');
+                if (pTag) {
+                    if (audioTracks.length > 0) {
+                        pTag.textContent = '📷 Camera unavailable - Audio only mode';
+                    } else {
+                        pTag.textContent = '📷 Camera unavailable - You can still view remote video';
+                    }
+                }
+            }
+            if (localVideoBox) {
+                localVideoBox.removeAttribute('data-video-active');
+            }
+            console.log('ℹ️ No local video available');
+        }
+        
+        // Enumerate devices for camera switching (if available)
         navigator.mediaDevices.enumerateDevices().then(devices => {
             availableCameras = devices.filter(device => device.kind === 'videoinput');
             console.log(`📷 Found ${availableCameras.length} camera(s) available`);
@@ -2246,16 +2301,17 @@ async function initializeVideoStreams() {
             console.error('Error enumerating devices:', err);
         });
         
-        // Create peer connection if it doesn't exist
+        // CRITICAL: Always create peer connection - even without local media
+        // This allows us to receive remote video/audio streams
         if (!peerConnection) {
             createPeerConnection();
+            console.log('✅ Peer connection created (ready to receive remote streams)');
         } else {
-            // If peer connection exists, just ensure tracks are added
             console.log('ℹ️ Peer connection already exists, ensuring tracks are added');
         }
         
-        // Add all local stream tracks to peer connection
-        if (peerConnection && localStream) {
+        // Add local stream tracks to peer connection (if we have any)
+        if (peerConnection && stream && stream.getTracks().length > 0) {
             console.log('📤 Adding local tracks to peer connection...');
             
             // Check existing senders to avoid duplicates
@@ -2264,7 +2320,7 @@ async function initializeVideoStreams() {
                 .map(s => s.track?.id)
                 .filter(Boolean);
             
-            localStream.getTracks().forEach(track => {
+            stream.getTracks().forEach(track => {
                 // Skip if track already exists
                 if (existingTrackIds.includes(track.id)) {
                     console.log(`  - ${track.kind} track (${track.id}) already in peer connection`);
@@ -2273,7 +2329,7 @@ async function initializeVideoStreams() {
                 
                 console.log(`  - Adding ${track.kind} track (${track.id})`);
                 try {
-                    peerConnection.addTrack(track, localStream);
+                    peerConnection.addTrack(track, stream);
                 } catch (err) {
                     console.error(`Error adding ${track.kind} track:`, err);
                     // If error is about duplicate track, try to replace existing one
@@ -2289,35 +2345,41 @@ async function initializeVideoStreams() {
             
             // Verify tracks were added
             const senders = peerConnection.getSenders();
-            console.log(`✅ Peer connection has ${senders.length} track sender(s)`);
+            console.log(`✅ Peer connection has ${senders.length} local track sender(s)`);
             senders.forEach(sender => {
                 if (sender.track) {
                     console.log(`  - ${sender.track.kind} track (id: ${sender.track.id}, enabled: ${sender.track.enabled})`);
                 }
             });
-            
-            // Ensure we have both audio and video tracks
-            const audioTracks = localStream.getAudioTracks();
-            const videoTracks = localStream.getVideoTracks();
-            if (audioTracks.length === 0) {
-                console.warn('⚠️ No audio tracks in local stream');
+        } else {
+            if (!peerConnection) {
+                console.error('❌ Peer connection not created!');
+            } else if (!stream || stream.getTracks().length === 0) {
+                console.log('ℹ️ No local tracks to add - will receive remote streams only');
+                console.log('✅ Call can proceed - you can still see and hear the other party');
             }
-            if (videoTracks.length === 0) {
-                console.warn('⚠️ No video tracks in local stream');
-            }
-            
-            // Note: WebRTC connection will be started from startVideoCall
-            // after all UI setup is complete
         }
         
     } catch (error) {
-        console.error('Error initializing video streams:', error);
+        // Final fallback - proceed without any local media
+        console.error('❌ Error initializing video streams:', error);
+        console.log('ℹ️ Proceeding without local media - call will still work for receiving remote streams');
+        
+        localStream = new MediaStream(); // Empty stream
+        
         const placeholder = document.getElementById('local-video-placeholder');
         if (placeholder) {
+            placeholder.style.display = 'flex';
             const pTag = placeholder.querySelector('p');
             if (pTag) {
-                pTag.textContent = 'Camera unavailable - Please allow camera/microphone access';
+                pTag.textContent = '📷 Camera/Mic unavailable - You can still view remote video/audio';
             }
+        }
+        
+        // Still create peer connection to receive remote streams
+        if (!peerConnection) {
+            createPeerConnection();
+            console.log('✅ Peer connection created despite error - ready to receive remote streams');
         }
     } finally {
         // Clear the in-progress flag
@@ -2599,41 +2661,41 @@ async function startWebRTCConnection() {
             // Doctor creates offer (caller)
             console.log('📞 Doctor creating offer...');
             
-            // CRITICAL: Ensure local stream and tracks are ready before creating offer
-            if (!localStream || localStream.getTracks().length === 0) {
-                console.log('⚠️ Local stream not ready yet - waiting...');
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Try again if still not ready
-                if (!localStream || localStream.getTracks().length === 0) {
-                    console.error('❌ Local stream still not ready after wait');
-                    return;
-                }
+            // Ensure local stream exists (may be empty if no camera/mic)
+            if (!localStream) {
+                localStream = new MediaStream(); // Create empty stream if needed
+                console.log('ℹ️ Created empty local stream (no camera/mic available)');
             }
             
-            // CRITICAL: Ensure ALL local tracks are added to peer connection before creating offer
+            // Add local tracks if available (but proceed even if none)
             const existingSenders = peerConnection.getSenders();
             const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
             const localTracks = localStream.getTracks();
             
             console.log(`📤 Preparing to add ${localTracks.length} local track(s) to peer connection`);
+            console.log('ℹ️ Note: Call will proceed even without local tracks - you can still receive remote streams');
             
-            localTracks.forEach(track => {
-                if (!existingTrackIds.includes(track.id)) {
-                    console.log(`📤 Adding ${track.kind} track (id: ${track.id}, enabled: ${track.enabled}) to peer connection`);
-                    try {
-                        // Add track with the same stream reference
-                        peerConnection.addTrack(track, localStream);
-                        console.log(`✅ ${track.kind} track added successfully`);
-                    } catch (err) {
-                        console.error(`❌ Error adding ${track.kind} track:`, err);
+            // Add local tracks if we have any
+            if (localTracks.length > 0) {
+                localTracks.forEach(track => {
+                    if (!existingTrackIds.includes(track.id)) {
+                        console.log(`📤 Adding ${track.kind} track (id: ${track.id}, enabled: ${track.enabled}) to peer connection`);
+                        try {
+                            // Add track with the same stream reference
+                            peerConnection.addTrack(track, localStream);
+                            console.log(`✅ ${track.kind} track added successfully`);
+                        } catch (err) {
+                            console.error(`❌ Error adding ${track.kind} track:`, err);
+                        }
+                    } else {
+                        console.log(`✓ ${track.kind} track already in peer connection`);
                     }
-                } else {
-                    console.log(`✓ ${track.kind} track already in peer connection`);
-                }
-            });
+                });
+            } else {
+                console.log('ℹ️ No local tracks to add - will receive remote streams only');
+            }
             
-            // Verify we have tracks BEFORE creating offer
+            // Verify sender state before creating offer
             const senders = peerConnection.getSenders();
             const audioSenders = senders.filter(s => s.track && s.track.kind === 'audio');
             const videoSenders = senders.filter(s => s.track && s.track.kind === 'video');
@@ -2642,15 +2704,21 @@ async function startWebRTCConnection() {
             console.log(`   - ${audioSenders.length} audio sender(s)`);
             console.log(`   - ${videoSenders.length} video sender(s)`);
             
-            if (audioSenders.length === 0) {
-                console.warn('⚠️ WARNING: No audio tracks in peer connection before creating offer!');
-            }
-            if (videoSenders.length === 0) {
-                console.warn('⚠️ WARNING: No video tracks in peer connection before creating offer!');
+            if (audioSenders.length === 0 && videoSenders.length === 0) {
+                console.log('ℹ️ No local tracks - you can still receive remote video/audio');
+            } else {
+                if (audioSenders.length === 0) {
+                    console.log('ℹ️ No audio tracks - you will not transmit audio but can receive it');
+                }
+                if (videoSenders.length === 0) {
+                    console.log('ℹ️ No video tracks - you will not transmit video but can receive it');
+                }
             }
             
-            // Wait a moment for tracks to be fully added to peer connection
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Wait a moment for tracks to be fully added (if any)
+            if (localTracks.length > 0) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
             
             // Create offer with explicit audio/video requirements
             console.log('📞 Creating WebRTC offer...');

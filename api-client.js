@@ -294,21 +294,30 @@ function initSocket() {
             console.log('✅ This offer is for our call - processing...');
             
             // CRITICAL: Ensure video streams are initialized BEFORE handling offer
+            // But proceed even if no local media is available
             if (typeof localStream === 'undefined' || !localStream) {
                 console.log('⚠️ Local stream not initialized yet - initializing now...');
                 if (typeof initializeVideoStreams === 'function') {
                     try {
                         await initializeVideoStreams();
-                        console.log('✅ Local stream initialized');
-                        // Wait a moment for tracks to be added
+                        console.log('✅ Local stream initialization attempt completed');
+                        // Wait a moment for tracks to be added (if any)
                         await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        // Check if we have a stream (even if empty)
+                        if (typeof localStream === 'undefined' || !localStream) {
+                            localStream = new MediaStream(); // Create empty stream
+                            console.log('ℹ️ Created empty local stream - will receive remote streams only');
+                        }
                     } catch (err) {
                         console.error('❌ Failed to initialize video streams:', err);
-                        return;
+                        console.log('ℹ️ Proceeding without local media - can still receive remote streams');
+                        // Create empty stream and proceed
+                        localStream = new MediaStream();
                     }
                 } else {
-                    console.error('❌ initializeVideoStreams function not available');
-                    return;
+                    console.error('⚠️ initializeVideoStreams function not available - proceeding without local media');
+                    localStream = new MediaStream(); // Create empty stream
                 }
             }
             
@@ -328,34 +337,39 @@ function initSocket() {
                 const existingSenders = peerConnection.getSenders();
                 const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
                 
-                // Get all tracks from local stream
-                const audioTracks = localStream.getAudioTracks();
-                const videoTracks = localStream.getVideoTracks();
+                // Get all tracks from local stream (if available)
+                const audioTracks = localStream ? localStream.getAudioTracks() : [];
+                const videoTracks = localStream ? localStream.getVideoTracks() : [];
                 const allTracks = [...audioTracks, ...videoTracks];
                 
                 console.log(`📤 Ensuring ${allTracks.length} local track(s) are added to peer connection`);
                 console.log(`   - ${audioTracks.length} audio track(s)`);
                 console.log(`   - ${videoTracks.length} video track(s)`);
                 
-                allTracks.forEach(track => {
-                    if (!existingTrackIds.includes(track.id)) {
-                        console.log(`📤 Adding ${track.kind} track (id: ${track.id}) to peer connection`);
-                        try {
-                            peerConnection.addTrack(track, localStream);
-                            console.log(`✅ ${track.kind} track added successfully`);
-                        } catch (err) {
-                            console.error(`❌ Error adding ${track.kind} track:`, err);
-                            // Try replacing if it's a duplicate
-                            const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
-                            if (existingSender) {
-                                console.log(`🔄 Replacing existing ${track.kind} track`);
-                                existingSender.replaceTrack(track).catch(e => console.error('Error replacing track:', e));
+                if (allTracks.length > 0) {
+                    allTracks.forEach(track => {
+                        if (!existingTrackIds.includes(track.id)) {
+                            console.log(`📤 Adding ${track.kind} track (id: ${track.id}) to peer connection`);
+                            try {
+                                peerConnection.addTrack(track, localStream);
+                                console.log(`✅ ${track.kind} track added successfully`);
+                            } catch (err) {
+                                console.error(`❌ Error adding ${track.kind} track:`, err);
+                                // Try replacing if it's a duplicate
+                                const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
+                                if (existingSender) {
+                                    console.log(`🔄 Replacing existing ${track.kind} track`);
+                                    existingSender.replaceTrack(track).catch(e => console.error('Error replacing track:', e));
+                                }
                             }
+                        } else {
+                            console.log(`✓ ${track.kind} track (id: ${track.id}) already in peer connection`);
                         }
-                    } else {
-                        console.log(`✓ ${track.kind} track (id: ${track.id}) already in peer connection`);
-                    }
-                });
+                    });
+                } else {
+                    console.log('ℹ️ No local tracks available - will receive remote streams only');
+                    console.log('✅ Call can proceed - you can still see and hear the other party');
+                }
                 
                 // Verify final state
                 const finalSenders = peerConnection.getSenders();
@@ -363,14 +377,18 @@ function initSocket() {
                 const finalVideoCount = finalSenders.filter(s => s.track && s.track.kind === 'video').length;
                 console.log(`✅ Peer connection now has ${finalAudioCount} audio sender(s) and ${finalVideoCount} video sender(s)`);
                 
-                if (finalAudioCount === 0) {
-                    console.warn('⚠️ WARNING: No audio tracks in peer connection!');
-                }
-                if (finalVideoCount === 0) {
-                    console.warn('⚠️ WARNING: No video tracks in peer connection!');
+                if (finalAudioCount === 0 && finalVideoCount === 0) {
+                    console.log('ℹ️ No local tracks - you can still receive remote video/audio');
+                } else {
+                    if (finalAudioCount === 0) {
+                        console.log('ℹ️ No audio tracks - you will not transmit audio but can receive it');
+                    }
+                    if (finalVideoCount === 0) {
+                        console.log('ℹ️ No video tracks - you will not transmit video but can receive it');
+                    }
                 }
             } else {
-                console.error('❌ Cannot add tracks - missing localStream or peerConnection');
+                console.log('ℹ️ localStream or peerConnection not available - proceeding anyway for receiving remote streams');
             }
             
             try {
