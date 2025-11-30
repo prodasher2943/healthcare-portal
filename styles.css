@@ -3320,13 +3320,17 @@ body {
 
 /* Dark Mode Styles */
 body.dark-mode {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    color: #e0e0e0;
+    background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #0f0f1e 100%);
+    background-attachment: fixed;
+    color: #e8e8e8;
 }
 
+/* Dashboard Navigation Dark Mode */
 body.dark-mode .dashboard-nav {
-    background: #1e1e2e;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    background: rgba(30, 30, 46, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(124, 138, 255, 0.1);
+    border-bottom: 1px solid rgba(124, 138, 255, 0.15);
 }
 
 body.dark-mode .nav-brand h2 {
@@ -3346,40 +3350,49 @@ body.dark-mode .btn-icon:hover {
 body.dark-mode .dashboard-content,
 body.dark-mode .panel,
 body.dark-mode .welcome-card {
-    background: #1e1e2e;
-    color: #e0e0e0;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #1e1e2e 0%, #252542 100%);
+    color: #e8e8e8;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(124, 138, 255, 0.1);
+    border: 1px solid rgba(124, 138, 255, 0.15);
 }
 
 body.dark-mode .modal-content {
-    background: #1e1e2e;
-    color: #e0e0e0;
+    background: linear-gradient(135deg, #1e1e2e 0%, #252542 100%);
+    color: #e8e8e8;
+    border: 1px solid rgba(124, 138, 255, 0.2);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+
+body.dark-mode .settings-modal-content {
+    background: linear-gradient(135deg, #1e1e2e 0%, #252542 100%);
 }
 
 body.dark-mode .form-group input,
 body.dark-mode .form-group textarea,
 body.dark-mode .form-group select {
     background: #2a2a3e;
-    border-color: #444;
-    color: #e0e0e0;
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
 }
 
 body.dark-mode .form-group input:focus,
 body.dark-mode .form-group textarea:focus,
 body.dark-mode .form-group select:focus {
     border-color: #7c8aff;
-    background: #2f2f3f;
+    background: #2f2f43;
+    box-shadow: 0 0 0 3px rgba(124, 138, 255, 0.2);
 }
 
 body.dark-mode .medicine-search-input {
     background: #2a2a3e;
-    border-color: #444;
-    color: #e0e0e0;
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
 }
 
 body.dark-mode .medicine-search-input:focus {
     border-color: #7c8aff;
-    background: #2f2f3f;
+    background: #2f2f43;
+    box-shadow: 0 0 0 3px rgba(124, 138, 255, 0.2);
 }
 
 body.dark-mode .settings-option {
@@ -3465,11 +3478,834 @@ body.dark-mode .schedule-time-row {
 
 body.dark-mode .request-summary,
 body.dark-mode .patient-info {
-    background: #2a2a3e;
-    color: #e0e0e0;
+    background: rgba(42, 42, 62, 0.8);
+    color: #e8e8e8;
+    border: 1px solid rgba(124, 138, 255, 0.2);
 }
 
 body.dark-mode .request-summary h5 {
-    color: #e0e0e0;
+    color: #7c8aff;
+}
+
+body.dark-mode .summary-text {
+    color: rgba(232, 232, 232, 0.9);
+}
+
+body.dark-mode .patient-info p {
+    color: rgba(232, 232, 232, 0.8);
+}
+
+body.dark-mode .call-summary {
+    background: rgba(42, 42, 62, 0.5);
+    color: rgba(232, 232, 232, 0.9);
+}
+
+body.dark-mode .consultation-panel {
+    background: rgba(42, 42, 62, 0.5);
+    border-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .history-card {
+    background: rgba(42, 42, 62, 0.8);
+    border-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .history-card:hover {
+    border-color: rgba(124, 138, 255, 0.4);
+}
+
+/* Chat Messages Dark Mode */
+body.dark-mode .chat-messages {
+    background: rgba(30, 30, 46, 0.5);
+}
+
+body.dark-mode .message-content {
+    background: #2a2a3e !important;
+    color: #e8e8e8 !important;
+    border: 1px solid rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .user-message .message-content {
+    background: linear-gradient(135deg, #7c8aff 0%, #9b6eff 100%) !important;
+    color: white !important;
+    border: none;
+}
+
+body.dark-mode .bot-message .message-content {
+    background: #2a2a3e !important;
+    color: #e8e8e8 !important;
+}
+
+body.dark-mode .message-time {
+    color: rgba(232, 232, 232, 0.6);
+}
+
+body.dark-mode .chat-input-container {
+    border-top-color: rgba(124, 138, 255, 0.2);
+    background: rgba(30, 30, 46, 0.8);
+}
+
+body.dark-mode .chat-input {
+    background: #2a2a3e;
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+body.dark-mode .chat-input:focus {
+    border-color: #7c8aff;
+    background: #2f2f43;
+}
+
+body.dark-mode .chat-input::placeholder {
+    color: rgba(232, 232, 232, 0.5);
+}
+
+/* Empty State Dark Mode */
+body.dark-mode .empty-state {
+    color: rgba(232, 232, 232, 0.6);
+}
+
+/* Medicine Items Dark Mode */
+body.dark-mode .medicine-item {
+    background: #2a2a3e;
+    border-left-color: #7c8aff;
+}
+
+body.dark-mode .medicine-header h4 {
+    color: #e8e8e8;
+}
+
+body.dark-mode .medicine-details p {
+    color: rgba(232, 232, 232, 0.8);
+}
+
+/* Panel Headers Dark Mode */
+body.dark-mode .panel-header {
+    border-bottom-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .panel-header h3 {
+    color: #7c8aff;
+}
+
+/* Consultation Panel Dark Mode */
+body.dark-mode .consultation-placeholder {
+    background: rgba(42, 42, 62, 0.5);
+    color: rgba(232, 232, 232, 0.7);
+}
+
+body.dark-mode .consultation-option {
+    background: rgba(42, 42, 62, 0.8);
+    border-color: rgba(124, 138, 255, 0.3);
+}
+
+/* Chat List Dark Mode */
+body.dark-mode .chat-list-item {
+    background: rgba(42, 42, 62, 0.5);
+    border-color: rgba(124, 138, 255, 0.1);
+}
+
+body.dark-mode .chat-list-item:hover {
+    background: rgba(42, 42, 62, 0.8);
+    border-color: rgba(124, 138, 255, 0.3);
+}
+
+body.dark-mode .chat-list-item.active {
+    background: rgba(124, 138, 255, 0.2);
+    border-color: #7c8aff;
+}
+
+body.dark-mode .chat-list-item h4 {
+    color: #e8e8e8;
+}
+
+body.dark-mode .chat-list-item .chat-preview {
+    color: rgba(232, 232, 232, 0.7);
+}
+
+/* Doctor List Dark Mode */
+body.dark-mode .doctor-list {
+    background: rgba(30, 30, 46, 0.5);
+}
+
+body.dark-mode .doctor-card-header h4 {
+    color: #e8e8e8;
+}
+
+body.dark-mode .doctor-card p {
+    color: rgba(232, 232, 232, 0.8);
+}
+
+body.dark-mode .doctor-card .specialization {
+    color: #7c8aff;
+}
+
+/* Form Elements Dark Mode - Enhanced */
+body.dark-mode .form-group label {
+    color: #e8e8e8;
+}
+
+body.dark-mode .form-group small {
+    color: rgba(232, 232, 232, 0.6);
+}
+
+body.dark-mode select {
+    background: #2a2a3e;
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+body.dark-mode select:focus {
+    border-color: #7c8aff;
+    background: #2f2f43;
+}
+
+/* Buttons Dark Mode - Enhanced */
+body.dark-mode .btn-primary {
+    background: linear-gradient(135deg, #7c8aff 0%, #9b6eff 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(124, 138, 255, 0.3);
+}
+
+body.dark-mode .btn-primary:hover {
+    box-shadow: 0 6px 20px rgba(124, 138, 255, 0.4);
+    transform: translateY(-2px);
+}
+
+body.dark-mode .btn-secondary {
+    background: rgba(124, 138, 255, 0.2);
+    color: #7c8aff;
+    border: 1px solid rgba(124, 138, 255, 0.3);
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: rgba(124, 138, 255, 0.3);
+    border-color: #7c8aff;
+}
+
+body.dark-mode .btn-danger {
+    background: rgba(220, 53, 69, 0.2);
+    color: #ff6b7a;
+    border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+body.dark-mode .btn-danger:hover {
+    background: rgba(220, 53, 69, 0.3);
+}
+
+/* Modal Dark Mode - Enhanced (already defined above, keeping for consistency) */
+
+body.dark-mode .modal-content h2,
+body.dark-mode .modal-content h3 {
+    color: #7c8aff;
+}
+
+body.dark-mode .close {
+    color: rgba(232, 232, 232, 0.7);
+}
+
+body.dark-mode .close:hover {
+    color: #e8e8e8;
+}
+
+/* Settings Dark Mode - Enhanced */
+
+body.dark-mode .settings-tab-content {
+    background: rgba(42, 42, 62, 0.3);
+}
+
+body.dark-mode .settings-option label span {
+    color: #e8e8e8;
+}
+
+body.dark-mode input[type="checkbox"] {
+    accent-color: #7c8aff;
+}
+
+/* Video Call Dark Mode */
+body.dark-mode .video-call-sidebar {
+    background: rgba(30, 30, 46, 0.95);
+    border-left-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .call-info-panel {
+    background: rgba(42, 42, 62, 0.8);
+}
+
+body.dark-mode .prescription-panel {
+    background: rgba(42, 42, 62, 0.8);
+}
+
+body.dark-mode .prescription-textarea {
+    background: #2a2a3e;
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+body.dark-mode .prescription-textarea:focus {
+    border-color: #7c8aff;
+    background: #2f2f43;
+}
+
+body.dark-mode .prescription-textarea::placeholder {
+    color: rgba(232, 232, 232, 0.5);
+}
+
+/* Status Badges Dark Mode */
+body.dark-mode .status-badge {
+    color: #e8e8e8;
+}
+
+body.dark-mode .status-pending {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+body.dark-mode .status-accepted {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+}
+
+body.dark-mode .status-rejected {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+/* Scrollbar Dark Mode */
+body.dark-mode ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+body.dark-mode ::-webkit-scrollbar-track {
+    background: rgba(30, 30, 46, 0.5);
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+    background: rgba(124, 138, 255, 0.3);
+    border-radius: 5px;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+    background: rgba(124, 138, 255, 0.5);
+}
+
+/* Links Dark Mode */
+body.dark-mode a {
+    color: #7c8aff;
+}
+
+body.dark-mode a:hover {
+    color: #9b6eff;
+}
+
+/* Text Selection Dark Mode */
+body.dark-mode ::selection {
+    background: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+/* Input Placeholders Dark Mode */
+body.dark-mode input::placeholder,
+body.dark-mode textarea::placeholder {
+    color: rgba(232, 232, 232, 0.5);
+}
+
+/* Welcome Messages Dark Mode */
+body.dark-mode #welcome-message,
+body.dark-mode #doctor-welcome-message {
+    color: #e8e8e8;
+}
+
+body.dark-mode #user-type-display {
+    color: rgba(232, 232, 232, 0.7);
+}
+
+/* Success/Error Messages Dark Mode */
+body.dark-mode .success-message {
+    background: rgba(40, 167, 69, 0.2);
+    color: #4ade80;
+    border-left-color: #28a745;
+}
+
+body.dark-mode .error-message {
+    background: rgba(220, 53, 69, 0.2);
+    color: #ff6b7a;
+    border-left-color: #dc3545;
+}
+
+/* Chat Header Dark Mode */
+body.dark-mode .chat-header-left,
+body.dark-mode .chat-header-right {
+    background: rgba(30, 30, 46, 0.8);
+    border-bottom-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode #chat-title {
+    color: #7c8aff;
+}
+
+/* Video Call Controls Dark Mode */
+body.dark-mode .video-call-controls button {
+    background: rgba(42, 42, 62, 0.9);
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+body.dark-mode .video-call-controls button:hover {
+    background: rgba(124, 138, 255, 0.2);
+    border-color: #7c8aff;
+}
+
+body.dark-mode .video-call-controls button.muted,
+body.dark-mode .video-call-controls button.video-off {
+    background: rgba(220, 53, 69, 0.2);
+    border-color: rgba(220, 53, 69, 0.3);
+}
+
+/* Request Actions Dark Mode */
+body.dark-mode .request-actions {
+    border-top-color: rgba(124, 138, 255, 0.2);
+}
+
+/* Medicine Search Results Dark Mode */
+body.dark-mode .medicine-search-results {
+    background: rgba(42, 42, 62, 0.9);
+    border-color: rgba(124, 138, 255, 0.3);
+}
+
+/* Settings Tabs Dark Mode - Enhanced */
+body.dark-mode .settings-tabs {
+    border-bottom-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .settings-tab {
+    color: rgba(232, 232, 232, 0.7);
+    border-bottom-color: transparent;
+}
+
+body.dark-mode .settings-tab:hover {
+    color: #7c8aff;
+    background: rgba(124, 138, 255, 0.1);
+}
+
+body.dark-mode .settings-tab.active {
+    color: #7c8aff;
+    border-bottom-color: #7c8aff;
+    background: rgba(124, 138, 255, 0.05);
+}
+
+/* Enhanced Visual Polish */
+body.dark-mode * {
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dashboard Tabs */
+.dashboard-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    padding: 0 1rem;
+    border-bottom: 2px solid #e0e0e0;
+    overflow-x: auto;
+}
+
+.dashboard-tab {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #666;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.dashboard-tab:hover {
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.dashboard-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.patient-tab-content,
+.doctor-tab-content {
+    display: none;
+}
+
+.patient-tab-content.active,
+.doctor-tab-content.active {
+    display: block;
+}
+
+.health-dashboard-grid,
+.analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+/* Appointment Card Styles */
+.appointment-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #667eea;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.appointment-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.appointment-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.appointment-card-header h4 {
+    margin: 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.appointment-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.appointment-status.upcoming {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.appointment-status.completed {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+}
+
+.appointment-status.cancelled {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+.appointment-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.appointment-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* Vitals Display */
+.vitals-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #28a745;
+}
+
+.vitals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.vital-item {
+    text-align: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.vital-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #667eea;
+}
+
+.vital-label {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.25rem;
+}
+
+/* Reminder Card */
+.reminder-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #ffc107;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reminder-info h4 {
+    margin: 0 0 0.25rem 0;
+    color: #333;
+}
+
+.reminder-time {
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* Report Card */
+.report-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #17a2b8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.report-info h4 {
+    margin: 0 0 0.25rem 0;
+    color: #333;
+}
+
+.report-type {
+    color: #17a2b8;
+    font-size: 0.9rem;
+}
+
+/* Emergency Contact Card */
+.emergency-contact-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #dc3545;
+    position: relative;
+}
+
+.emergency-contact-card.high {
+    border-left-color: #dc3545;
+    background: linear-gradient(to right, rgba(220, 53, 69, 0.05), white);
+}
+
+.emergency-contact-card.medium {
+    border-left-color: #ffc107;
+}
+
+.emergency-contact-card.low {
+    border-left-color: #28a745;
+}
+
+.emergency-quick-call {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+/* Calendar View */
+.appointment-calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.calendar-day {
+    aspect-ratio: 1;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.calendar-day:hover {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.calendar-day.today {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    font-weight: 700;
+}
+
+.calendar-day.has-appointment {
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.calendar-day-number {
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.calendar-appointment-dot {
+    width: 6px;
+    height: 6px;
+    background: #28a745;
+    border-radius: 50%;
+    margin: 0.25rem auto 0;
+}
+
+/* Statistics Cards */
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    border-left: 4px solid #667eea;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #667eea;
+    margin: 0.5rem 0;
+}
+
+.stat-label {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* Review Card */
+.review-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #ffc107;
+}
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.review-rating {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.star {
+    font-size: 1.2rem;
+}
+
+.star.filled {
+    color: #ffc107;
+}
+
+.star.empty {
+    color: #ddd;
+}
+
+.review-patient {
+    font-weight: 600;
+    color: #333;
+}
+
+.review-date {
+    color: #999;
+    font-size: 0.85rem;
+}
+
+/* Patient Card */
+.patient-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #667eea;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.patient-card:hover {
+    transform: translateX(5px);
+}
+
+.patient-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+/* Dark Mode for New Features */
+body.dark-mode .dashboard-tabs {
+    border-bottom-color: rgba(124, 138, 255, 0.2);
+}
+
+body.dark-mode .dashboard-tab {
+    color: rgba(232, 232, 232, 0.7);
+}
+
+body.dark-mode .dashboard-tab:hover {
+    color: #7c8aff;
+    background: rgba(124, 138, 255, 0.1);
+}
+
+body.dark-mode .dashboard-tab.active {
+    color: #7c8aff;
+    border-bottom-color: #7c8aff;
+    background: rgba(124, 138, 255, 0.05);
+}
+
+body.dark-mode .appointment-card,
+body.dark-mode .vitals-card,
+body.dark-mode .reminder-card,
+body.dark-mode .report-card,
+body.dark-mode .emergency-contact-card,
+body.dark-mode .stat-card,
+body.dark-mode .review-card,
+body.dark-mode .patient-card {
+    background: rgba(42, 42, 62, 0.8);
+    border-left-color: #7c8aff;
+}
+
+body.dark-mode .appointment-card h4,
+body.dark-mode .reminder-info h4,
+body.dark-mode .report-info h4,
+body.dark-mode .review-patient {
+    color: #e8e8e8;
+}
+
+body.dark-mode .calendar-day {
+    background: rgba(42, 42, 62, 0.8);
+    border-color: rgba(124, 138, 255, 0.3);
+    color: #e8e8e8;
+}
+
+body.dark-mode .calendar-day.today {
+    border-color: #7c8aff;
+    background: rgba(124, 138, 255, 0.2);
 }
 

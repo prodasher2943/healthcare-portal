@@ -3255,6 +3255,8 @@ async function endVideoCall() {
     
     // Clear current call ID
     const savedConsultationForSchedule = currentConsultation; // Save reference
+    const savedConsultationId = currentConsultation?.id;
+    const savedDoctorEmail = currentConsultation?.doctorEmail;
     currentCallId = null;
     currentConsultation = null;
     
@@ -3262,6 +3264,16 @@ async function endVideoCall() {
     loadDashboard();
     loadConsultationRequests();
     loadConsultationHistory();
+    
+    // Show review modal for patients after consultation ends
+    if (savedConsultationId && savedDoctorEmail) {
+        const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+        if (userData && (userData.user_type === 'Patient' || userData.user_type?.toLowerCase() === 'patient')) {
+            setTimeout(() => {
+                showReviewModal(savedConsultationId, savedDoctorEmail);
+            }, 1000); // Show after 1 second
+        }
+    }
     
     // Reset consultation panel based on current chat state
     const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
@@ -4439,5 +4451,1853 @@ function displayMedicationSchedule(patientEmail, containerElement) {
     
     html += '</div>';
     containerElement.innerHTML = html;
+}
+
+// ============================================
+// NEW FEATURES - ADDITIONAL FUNCTIONALITY
+// ============================================
+
+// Tab Switching Functions
+function switchPatientTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.patient-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    document.querySelectorAll('.dashboard-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(`patient-tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+    
+    // Activate tab button
+    event?.target?.classList.add('active');
+    
+    // Load data when switching tabs
+    if (tabName === 'appointments') {
+        loadAppointments();
+    } else if (tabName === 'records') {
+        loadMedicalRecords();
+    } else if (tabName === 'health') {
+        loadVitals();
+        loadReminders();
+    } else if (tabName === 'prescriptions') {
+        loadPrescriptionHistory();
+    } else if (tabName === 'reports') {
+        loadMedicalReports();
+    } else if (tabName === 'emergency') {
+        loadEmergencyContacts();
+    }
+}
+
+function switchDoctorTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.doctor-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    document.querySelectorAll('.dashboard-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById(`doctor-tab-${tabName}`);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+    
+    // Activate tab button
+    event?.target?.classList.add('active');
+    
+    // Load data when switching tabs
+    if (tabName === 'calendar') {
+        loadAppointmentCalendar();
+    } else if (tabName === 'patients') {
+        loadMyPatients();
+    } else if (tabName === 'reviews') {
+        loadDoctorReviews();
+    } else if (tabName === 'analytics') {
+        loadDoctorAnalytics();
+    }
+}
+
+// ============================================
+// FEATURE 1: APPOINTMENT SCHEDULING SYSTEM
+// ============================================
+
+// Open appointment booking modal
+function openAppointmentModal() {
+    const modal = document.getElementById('appointment-modal');
+    if (!modal) return;
+    
+    // Set minimum date to today
+    const dateInput = document.getElementById('appointment-date');
+    if (dateInput) {
+        dateInput.min = new Date().toISOString().split('T')[0];
+        dateInput.value = '';
+    }
+    
+    // Load available doctors
+    loadAvailableDoctorsForAppointment();
+    
+    modal.style.display = 'block';
+}
+
+function closeAppointmentModal() {
+    const modal = document.getElementById('appointment-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// Load doctors for appointment booking
+async function loadAvailableDoctorsForAppointment() {
+    const select = document.getElementById('appointment-doctor');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Choose a doctor...</option>';
+    
+    try {
+        const currentUserData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+        const consultations = await getConsultations(currentUserData?.email || '', 'Patient');
+        const allUsers = await getAllUsers();
+        const consultedDoctors = new Set();
+        
+        consultations.forEach(c => {
+            if (c.doctorEmail) consultedDoctors.add(c.doctorEmail);
+        });
+        
+        // Get all doctors
+        const doctors = Object.values(allUsers).filter(u => 
+            u.user_type === 'Doctor' || u.user_type?.toLowerCase() === 'doctor'
+        );
+        
+        doctors.forEach(doctor => {
+            const email = doctor.email || Object.keys(allUsers).find(k => allUsers[k] === doctor);
+            if (!email) return;
+            
+            const userData = doctor.user_data || {};
+            const name = userData.name || email;
+            const specialization = userData.specialization || 'General';
+            const isConsulted = consultedDoctors.has(email);
+            const label = isConsulted ? `Dr. ${name} (${specialization}) - Previously consulted` : `Dr. ${name} (${specialization})`;
+            
+            const option = document.createElement('option');
+            option.value = email;
+            option.textContent = label;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading doctors for appointment:', error);
+    }
+}
+
+// Book appointment
+async function bookAppointment(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) {
+        alert('Please login to book an appointment');
+        return;
+    }
+    
+    const doctorEmail = document.getElementById('appointment-doctor').value;
+    const date = document.getElementById('appointment-date').value;
+    const time = document.getElementById('appointment-time').value;
+    const reason = document.getElementById('appointment-reason').value;
+    
+    if (!doctorEmail || !date || !time) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    const appointment = {
+        id: `appt_${Date.now()}`,
+        patientEmail: userData.email,
+        patientName: userData.user_data?.name || 'Patient',
+        doctorEmail: doctorEmail,
+        date: date,
+        time: time,
+        reason: reason || 'Not specified',
+        status: 'upcoming',
+        createdAt: new Date().toISOString()
+    };
+    
+    // Save to localStorage
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    appointments.push(appointment);
+    localStorage.setItem('appointments', JSON.stringify(appointments));
+    
+    alert('✅ Appointment booked successfully!');
+    closeAppointmentModal();
+    document.getElementById('appointment-form').reset();
+    
+    // Reload appointments if on appointments tab
+    if (document.getElementById('patient-tab-appointments')?.classList.contains('active')) {
+        loadAppointments();
+    }
+}
+
+// Load appointments
+function loadAppointments() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const appointmentsList = document.getElementById('appointments-list');
+    if (!appointmentsList) return;
+    
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const userAppointments = appointments.filter(apt => 
+        apt.patientEmail === userData.email || apt.doctorEmail === userData.email
+    ).sort((a, b) => {
+        const dateA = new Date(`${a.date}T${a.time}`);
+        const dateB = new Date(`${b.date}T${b.time}`);
+        return dateB - dateA;
+    });
+    
+    if (userAppointments.length === 0) {
+        appointmentsList.innerHTML = '<p class="empty-state">No appointments scheduled. Book an appointment to get started.</p>';
+        return;
+    }
+    
+    appointmentsList.innerHTML = userAppointments.map(apt => {
+        const appointmentDate = new Date(`${apt.date}T${apt.time}`);
+        const isPast = appointmentDate < new Date();
+        const status = isPast ? 'completed' : apt.status;
+        
+        const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        const isPatient = apt.patientEmail === userData.email;
+        const otherParty = isPatient ? allUsers[apt.doctorEmail] : allUsers[apt.patientEmail];
+        const otherPartyName = isPatient 
+            ? (otherParty?.user_data?.name ? `Dr. ${otherParty.user_data.name}` : apt.doctorEmail)
+            : (apt.patientName || apt.patientEmail);
+        
+        return `
+            <div class="appointment-card">
+                <div class="appointment-card-header">
+                    <h4>${isPatient ? '👨‍⚕️' : '👤'} Appointment with ${otherPartyName}</h4>
+                    <span class="appointment-status ${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                </div>
+                <div class="appointment-details">
+                    <div class="appointment-detail-item">
+                        <span>📅</span>
+                        <span>${formatDate(apt.date)}</span>
+                    </div>
+                    <div class="appointment-detail-item">
+                        <span>⏰</span>
+                        <span>${apt.time}</span>
+                    </div>
+                    ${apt.reason ? `
+                    <div class="appointment-detail-item">
+                        <span>💬</span>
+                        <span>${apt.reason}</span>
+                    </div>
+                    ` : ''}
+                </div>
+                ${!isPast ? `
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                    <button class="btn-secondary" onclick="cancelAppointment('${apt.id}')">❌ Cancel</button>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function cancelAppointment(appointmentId) {
+    if (!confirm('Are you sure you want to cancel this appointment?')) return;
+    
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const index = appointments.findIndex(apt => apt.id === appointmentId);
+    if (index !== -1) {
+        appointments[index].status = 'cancelled';
+        localStorage.setItem('appointments', JSON.stringify(appointments));
+        loadAppointments();
+    }
+}
+
+// ============================================
+// FEATURE 2: MEDICAL RECORDS VIEWER
+// ============================================
+
+function loadMedicalRecords() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const recordsList = document.getElementById('medical-records-list');
+    if (!recordsList) return;
+    
+    // Get all consultations with prescriptions
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const userConsultations = consultations.filter(c => 
+        c.patientEmail === userData.email && c.status === 'accepted'
+    ).sort((a, b) => new Date(b.requestedDate || b.createdAt) - new Date(a.requestedDate || a.createdAt));
+    
+    if (userConsultations.length === 0) {
+        recordsList.innerHTML = '<p class="empty-state">No medical records available yet.</p>';
+        return;
+    }
+    
+    recordsList.innerHTML = userConsultations.map(consultation => {
+        const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        const doctor = allUsers[consultation.doctorEmail];
+        const doctorName = doctor?.user_data?.name ? `Dr. ${doctor.user_data.name}` : consultation.doctorEmail;
+        
+        return `
+            <div class="history-card">
+                <div class="history-header">
+                    <h4>Consultation with ${doctorName}</h4>
+                    <span class="history-date">${formatDateTime(consultation.requestedDate || consultation.createdAt)}</span>
+                </div>
+                ${consultation.chatSummary ? `
+                <div style="margin-top: 1rem;">
+                    <strong>Summary:</strong>
+                    <p style="color: #666; margin-top: 0.5rem;">${formatMessage(consultation.chatSummary)}</p>
+                </div>
+                ` : ''}
+                ${consultation.prescription ? `
+                <div style="margin-top: 1rem;">
+                    <strong>Prescription:</strong>
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 0.5rem; white-space: pre-wrap;">${consultation.prescription}</div>
+                </div>
+                ` : ''}
+                ${consultation.medicationSchedule ? `
+                <div style="margin-top: 1rem;">
+                    <strong>Medication Schedule:</strong>
+                    <div id="medication-schedule-${consultation.id}" style="margin-top: 0.5rem;"></div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+    
+    // Display medication schedules
+    userConsultations.forEach(consultation => {
+        if (consultation.medicationSchedule) {
+            const container = document.getElementById(`medication-schedule-${consultation.id}`);
+            if (container) {
+                displayMedicationSchedule(consultation.patientEmail, container);
+            }
+        }
+    });
+}
+
+function exportMedicalRecords() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const userConsultations = consultations.filter(c => c.patientEmail === userData.email);
+    const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    const userReports = reports.filter(r => r.patientEmail === userData.email);
+    
+    const records = {
+        patient: userData.user_data,
+        consultations: userConsultations,
+        reports: userReports,
+        exportedAt: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(records, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `medical-records-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Medical records exported successfully!');
+}
+
+// ============================================
+// FEATURE 3: HEALTH DASHBOARD - VITALS
+// ============================================
+
+function openVitalsModal() {
+    const modal = document.getElementById('vitals-modal');
+    if (!modal) return;
+    
+    const dateInput = document.getElementById('vitals-date');
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+        dateInput.max = new Date().toISOString().split('T')[0];
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeVitalsModal() {
+    const modal = document.getElementById('vitals-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function saveVitals(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const vitals = {
+        id: `vitals_${Date.now()}`,
+        patientEmail: userData.email,
+        date: document.getElementById('vitals-date').value,
+        bloodPressure: document.getElementById('vitals-blood-pressure').value,
+        heartRate: parseInt(document.getElementById('vitals-heart-rate').value) || null,
+        temperature: parseFloat(document.getElementById('vitals-temperature').value) || null,
+        weight: parseFloat(document.getElementById('vitals-weight').value) || null,
+        notes: document.getElementById('vitals-notes').value,
+        createdAt: new Date().toISOString()
+    };
+    
+    const allVitals = JSON.parse(localStorage.getItem('vitals') || '[]');
+    allVitals.push(vitals);
+    localStorage.setItem('vitals', JSON.stringify(allVitals));
+    
+    alert('✅ Vital signs saved successfully!');
+    closeVitalsModal();
+    document.getElementById('vitals-form').reset();
+    loadVitals();
+}
+
+function loadVitals() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const vitalsDisplay = document.getElementById('vitals-display');
+    if (!vitalsDisplay) return;
+    
+    const allVitals = JSON.parse(localStorage.getItem('vitals') || '[]');
+    const userVitals = allVitals.filter(v => v.patientEmail === userData.email)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 10); // Show last 10
+    
+    if (userVitals.length === 0) {
+        vitalsDisplay.innerHTML = '<p class="empty-state">No vital signs recorded yet. Add your first reading!</p>';
+        return;
+    }
+    
+    // Show latest vitals in grid format
+    const latest = userVitals[0];
+    vitalsDisplay.innerHTML = `
+        <div class="vitals-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">Latest Reading - ${formatDate(latest.date)}</h4>
+            </div>
+            <div class="vitals-grid">
+                ${latest.bloodPressure ? `
+                <div class="vital-item">
+                    <div class="vital-value">${latest.bloodPressure}</div>
+                    <div class="vital-label">Blood Pressure</div>
+                </div>
+                ` : ''}
+                ${latest.heartRate ? `
+                <div class="vital-item">
+                    <div class="vital-value">${latest.heartRate}</div>
+                    <div class="vital-label">Heart Rate (BPM)</div>
+                </div>
+                ` : ''}
+                ${latest.temperature ? `
+                <div class="vital-item">
+                    <div class="vital-value">${latest.temperature}°F</div>
+                    <div class="vital-label">Temperature</div>
+                </div>
+                ` : ''}
+                ${latest.weight ? `
+                <div class="vital-item">
+                    <div class="vital-value">${latest.weight} lbs</div>
+                    <div class="vital-label">Weight</div>
+                </div>
+                ` : ''}
+            </div>
+            ${latest.notes ? `
+            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e0e0e0;">
+                <strong>Notes:</strong>
+                <p style="color: #666; margin-top: 0.5rem;">${latest.notes}</p>
+            </div>
+            ` : ''}
+        </div>
+        <div style="margin-top: 1rem;">
+            <button class="btn-secondary" onclick="showAllVitals()">📊 View All Records (${userVitals.length})</button>
+        </div>
+    `;
+}
+
+function showAllVitals() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const allVitals = JSON.parse(localStorage.getItem('vitals') || '[]');
+    const userVitals = allVitals.filter(v => v.patientEmail === userData.email)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const vitalsDisplay = document.getElementById('vitals-display');
+    if (!vitalsDisplay) return;
+    
+    vitalsDisplay.innerHTML = userVitals.map(v => `
+        <div class="vitals-card">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                <h4 style="margin: 0;">${formatDate(v.date)}</h4>
+                <button class="btn-secondary" onclick="deleteVitals('${v.id}')" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">🗑️</button>
+            </div>
+            <div class="vitals-grid">
+                ${v.bloodPressure ? `<div class="vital-item"><div class="vital-value">${v.bloodPressure}</div><div class="vital-label">BP</div></div>` : ''}
+                ${v.heartRate ? `<div class="vital-item"><div class="vital-value">${v.heartRate}</div><div class="vital-label">BPM</div></div>` : ''}
+                ${v.temperature ? `<div class="vital-item"><div class="vital-value">${v.temperature}°F</div><div class="vital-label">Temp</div></div>` : ''}
+                ${v.weight ? `<div class="vital-item"><div class="vital-value">${v.weight}</div><div class="vital-label">lbs</div></div>` : ''}
+            </div>
+            ${v.notes ? `<p style="margin-top: 0.5rem; color: #666;">${v.notes}</p>` : ''}
+        </div>
+    `).join('');
+}
+
+function deleteVitals(vitalsId) {
+    if (!confirm('Delete this vital reading?')) return;
+    
+    const allVitals = JSON.parse(localStorage.getItem('vitals') || '[]');
+    const filtered = allVitals.filter(v => v.id !== vitalsId);
+    localStorage.setItem('vitals', JSON.stringify(filtered));
+    showAllVitals();
+}
+
+// ============================================
+// FEATURE 4: MEDICATION REMINDERS
+// ============================================
+
+function openReminderModal() {
+    const modal = document.getElementById('reminder-modal');
+    if (!modal) return;
+    modal.style.display = 'block';
+}
+
+function closeReminderModal() {
+    const modal = document.getElementById('reminder-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function saveReminder(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const selectedDays = Array.from(document.querySelectorAll('input[name="reminder-day"]:checked')).map(cb => cb.value);
+    if (selectedDays.length === 0) {
+        alert('Please select at least one day');
+        return;
+    }
+    
+    const reminder = {
+        id: `reminder_${Date.now()}`,
+        patientEmail: userData.email,
+        medication: document.getElementById('reminder-medication').value,
+        time: document.getElementById('reminder-time').value,
+        days: selectedDays,
+        dosage: document.getElementById('reminder-dosage').value,
+        enabled: true,
+        createdAt: new Date().toISOString()
+    };
+    
+    const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+    reminders.push(reminder);
+    localStorage.setItem('medicationReminders', JSON.stringify(reminders));
+    
+    alert('✅ Medication reminder set successfully!');
+    closeReminderModal();
+    document.getElementById('reminder-form').reset();
+    loadReminders();
+    startReminderCheck();
+}
+
+function loadReminders() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const remindersList = document.getElementById('reminders-list');
+    if (!remindersList) return;
+    
+    const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+    const userReminders = reminders.filter(r => r.patientEmail === userData.email && r.enabled);
+    
+    if (userReminders.length === 0) {
+        remindersList.innerHTML = '<p class="empty-state">No medication reminders set. Add a reminder to never miss a dose!</p>';
+        return;
+    }
+    
+    remindersList.innerHTML = userReminders.map(reminder => {
+        const daysStr = reminder.days.map(d => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(', ');
+        return `
+            <div class="reminder-card">
+                <div class="reminder-info">
+                    <h4>💊 ${reminder.medication}</h4>
+                    <p style="color: #666; margin: 0.25rem 0;">
+                        <span class="reminder-time">⏰ ${reminder.time}</span>
+                        <span style="margin-left: 1rem;">📅 ${daysStr}</span>
+                    </p>
+                    ${reminder.dosage ? `<p style="color: #666; margin-top: 0.25rem;">💉 ${reminder.dosage}</p>` : ''}
+                </div>
+                <div>
+                    <button class="btn-secondary" onclick="toggleReminder('${reminder.id}')" title="Disable reminder">🔕</button>
+                    <button class="btn-danger" onclick="deleteReminder('${reminder.id}')" style="margin-left: 0.5rem;" title="Delete reminder">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleReminder(reminderId) {
+    const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+    const reminder = reminders.find(r => r.id === reminderId);
+    if (reminder) {
+        reminder.enabled = !reminder.enabled;
+        localStorage.setItem('medicationReminders', JSON.stringify(reminders));
+        loadReminders();
+    }
+}
+
+function deleteReminder(reminderId) {
+    if (!confirm('Delete this reminder?')) return;
+    
+    const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+    const filtered = reminders.filter(r => r.id !== reminderId);
+    localStorage.setItem('medicationReminders', JSON.stringify(filtered));
+    loadReminders();
+}
+
+// Check for medication reminders
+function startReminderCheck() {
+    // Clear existing interval
+    if (window.reminderCheckInterval) {
+        clearInterval(window.reminderCheckInterval);
+    }
+    
+    // Check every minute
+    window.reminderCheckInterval = setInterval(() => {
+        const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+        if (!userData) return;
+        
+        const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+        const userReminders = reminders.filter(r => r.patientEmail === userData.email && r.enabled);
+        
+        const now = new Date();
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const currentDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+        
+        userReminders.forEach(reminder => {
+            if (reminder.time === currentTime && reminder.days.includes(currentDay)) {
+                // Show notification (don't spam - check if already shown today)
+                const lastShown = localStorage.getItem(`reminder_shown_${reminder.id}_${now.toDateString()}`);
+                if (!lastShown) {
+                    showReminderNotification(reminder);
+                    localStorage.setItem(`reminder_shown_${reminder.id}_${now.toDateString()}`, 'true');
+                }
+            }
+        });
+    }, 60000); // Check every minute
+}
+
+function showReminderNotification(reminder) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'reminder-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        max-width: 300px;
+        animation: slideInRight 0.3s ease;
+    `;
+    notification.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+            <h4 style="margin: 0;">⏰ Medication Reminder</h4>
+            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">×</button>
+        </div>
+        <p style="margin: 0.5rem 0;"><strong>${reminder.medication}</strong></p>
+        ${reminder.dosage ? `<p style="margin: 0.25rem 0; font-size: 0.9rem;">💉 ${reminder.dosage}</p>` : ''}
+        <p style="margin: 0.25rem 0; font-size: 0.85rem; opacity: 0.9;">Time: ${reminder.time}</p>
+    `;
+    document.body.appendChild(notification);
+    
+    // Auto remove after 10 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 10000);
+}
+
+// ============================================
+// FEATURE 5: PRESCRIPTION HISTORY
+// ============================================
+
+function loadPrescriptionHistory() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const prescriptionsList = document.getElementById('prescriptions-history-list');
+    if (!prescriptionsList) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const prescriptions = consultations.filter(c => 
+        c.patientEmail === userData.email && c.prescription && c.status === 'accepted'
+    ).sort((a, b) => new Date(b.requestedDate || b.createdAt) - new Date(a.requestedDate || a.createdAt));
+    
+    if (prescriptions.length === 0) {
+        prescriptionsList.innerHTML = '<p class="empty-state">No prescription history available.</p>';
+        return;
+    }
+    
+    prescriptionsList.innerHTML = prescriptions.map(consultation => {
+        const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        const doctor = allUsers[consultation.doctorEmail];
+        const doctorName = doctor?.user_data?.name ? `Dr. ${doctor.user_data.name}` : consultation.doctorEmail;
+        
+        return `
+            <div class="history-card">
+                <div class="history-header">
+                    <h4>💊 Prescription from ${doctorName}</h4>
+                    <span class="history-date">${formatDateTime(consultation.requestedDate || consultation.createdAt)}</span>
+                </div>
+                <div style="margin-top: 1rem; white-space: pre-wrap; background: #f8f9fa; padding: 1rem; border-radius: 8px;">
+                    ${consultation.prescription}
+                </div>
+                ${consultation.medicationSchedule ? `
+                <div style="margin-top: 1rem;">
+                    <button class="btn-secondary" onclick="viewMedicationSchedule('${consultation.id}')">📅 View Medication Schedule</button>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function viewMedicationSchedule(consultationId) {
+    const consultation = JSON.parse(localStorage.getItem('consultations') || '[]').find(c => c.id === consultationId);
+    if (!consultation || !consultation.medicationSchedule) return;
+    
+    const scheduleContainer = document.createElement('div');
+    scheduleContainer.id = 'schedule-modal-container';
+    scheduleContainer.style.cssText = 'margin-top: 1rem; padding: 1rem; background: white; border-radius: 8px;';
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2>📅 Medication Schedule</h2>
+            <div id="schedule-display"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    const display = document.getElementById('schedule-display');
+    if (display && consultation.patientEmail) {
+        displayMedicationSchedule(consultation.patientEmail, display);
+    }
+}
+
+function exportPrescriptions() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const prescriptions = consultations.filter(c => 
+        c.patientEmail === userData.email && c.prescription
+    ).map(c => ({
+        doctor: c.doctorEmail,
+        date: c.requestedDate || c.createdAt,
+        prescription: c.prescription,
+        medicationSchedule: c.medicationSchedule
+    }));
+    
+    const dataStr = JSON.stringify(prescriptions, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `prescriptions-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Prescriptions exported successfully!');
+}
+
+// ============================================
+// FEATURE 6: MEDICAL REPORTS UPLOAD
+// ============================================
+
+function openReportUploadModal() {
+    const modal = document.getElementById('report-upload-modal');
+    if (!modal) return;
+    
+    const dateInput = document.getElementById('report-date');
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+        dateInput.max = new Date().toISOString().split('T')[0];
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeReportUploadModal() {
+    const modal = document.getElementById('report-upload-modal');
+    if (modal) modal.style.display = 'none';
+    document.getElementById('report-upload-form').reset();
+}
+
+function uploadReport(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const fileInput = document.getElementById('report-file');
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Please select a file to upload');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        const report = {
+            id: `report_${Date.now()}`,
+            patientEmail: userData.email,
+            title: document.getElementById('report-title').value,
+            date: document.getElementById('report-date').value,
+            type: document.getElementById('report-type').value,
+            fileData: e.target.result,
+            fileName: file.name,
+            fileType: file.type,
+            notes: document.getElementById('report-notes').value,
+            uploadedAt: new Date().toISOString()
+        };
+        
+        const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+        reports.push(report);
+        localStorage.setItem('medicalReports', JSON.stringify(reports));
+        
+        alert('✅ Medical report uploaded successfully!');
+        closeReportUploadModal();
+        loadMedicalReports();
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+function loadMedicalReports() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const reportsList = document.getElementById('reports-list');
+    if (!reportsList) return;
+    
+    const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    const userReports = reports.filter(r => r.patientEmail === userData.email)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    if (userReports.length === 0) {
+        reportsList.innerHTML = '<p class="empty-state">No medical reports uploaded yet. Upload your first report!</p>';
+        return;
+    }
+    
+    reportsList.innerHTML = userReports.map(report => {
+        return `
+            <div class="report-card">
+                <div class="report-info">
+                    <h4>${report.title}</h4>
+                    <p style="color: #666; margin: 0.25rem 0;">
+                        <span class="report-type">${report.type}</span>
+                        <span style="margin-left: 1rem;">📅 ${formatDate(report.date)}</span>
+                    </p>
+                    ${report.notes ? `<p style="color: #666; margin-top: 0.25rem; font-size: 0.9rem;">${report.notes}</p>` : ''}
+                </div>
+                <div>
+                    <button class="btn-primary" onclick="viewReport('${report.id}')" title="View report">👁️ View</button>
+                    <button class="btn-secondary" onclick="downloadReport('${report.id}')" style="margin-left: 0.5rem;" title="Download report">📥 Download</button>
+                    <button class="btn-danger" onclick="deleteReport('${report.id}')" style="margin-left: 0.5rem;" title="Delete report">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function viewReport(reportId) {
+    const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    const report = reports.find(r => r.id === reportId);
+    if (!report) return;
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 90vw; max-height: 90vh; overflow: auto;">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2>${report.title}</h2>
+            <p style="color: #666; margin-bottom: 1rem;">📅 ${formatDate(report.date)} | 🏥 ${report.type}</p>
+            ${report.notes ? `<p style="margin-bottom: 1rem;">${report.notes}</p>` : ''}
+            <div style="text-align: center; margin-top: 2rem;">
+                ${report.fileType.startsWith('image/') 
+                    ? `<img src="${report.fileData}" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" alt="${report.title}">`
+                    : `<iframe src="${report.fileData}" style="width: 100%; height: 600px; border: none; border-radius: 8px;"></iframe>`
+                }
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function downloadReport(reportId) {
+    const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    const report = reports.find(r => r.id === reportId);
+    if (!report) return;
+    
+    const link = document.createElement('a');
+    link.href = report.fileData;
+    link.download = report.fileName || `report-${report.id}`;
+    link.click();
+}
+
+function deleteReport(reportId) {
+    if (!confirm('Delete this medical report?')) return;
+    
+    const reports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    const filtered = reports.filter(r => r.id !== reportId);
+    localStorage.setItem('medicalReports', JSON.stringify(filtered));
+    loadMedicalReports();
+}
+
+// ============================================
+// FEATURE 7: EMERGENCY CONTACTS
+// ============================================
+
+function openEmergencyContactModal() {
+    const modal = document.getElementById('emergency-contact-modal');
+    if (!modal) return;
+    modal.style.display = 'block';
+}
+
+function closeEmergencyContactModal() {
+    const modal = document.getElementById('emergency-contact-modal');
+    if (modal) modal.style.display = 'none';
+    document.getElementById('emergency-contact-form').reset();
+}
+
+function saveEmergencyContact(event) {
+    event.preventDefault();
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const contact = {
+        id: `emergency_${Date.now()}`,
+        patientEmail: userData.email,
+        name: document.getElementById('emergency-name').value,
+        relationship: document.getElementById('emergency-relationship').value,
+        phone: document.getElementById('emergency-phone').value,
+        email: document.getElementById('emergency-email').value,
+        priority: document.getElementById('emergency-priority').value,
+        createdAt: new Date().toISOString()
+    };
+    
+    const contacts = JSON.parse(localStorage.getItem('emergencyContacts') || '[]');
+    contacts.push(contact);
+    localStorage.setItem('emergencyContacts', JSON.stringify(contacts));
+    
+    alert('✅ Emergency contact saved successfully!');
+    closeEmergencyContactModal();
+    loadEmergencyContacts();
+}
+
+function loadEmergencyContacts() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const contactsList = document.getElementById('emergency-contacts-list');
+    if (!contactsList) return;
+    
+    const contacts = JSON.parse(localStorage.getItem('emergencyContacts') || '[]');
+    const userContacts = contacts.filter(c => c.patientEmail === userData.email)
+        .sort((a, b) => {
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            return priorityOrder[a.priority] - priorityOrder[b.priority];
+        });
+    
+    if (userContacts.length === 0) {
+        contactsList.innerHTML = '<p class="empty-state">No emergency contacts added. Add a contact for quick access in emergencies!</p>';
+        return;
+    }
+    
+    contactsList.innerHTML = userContacts.map(contact => {
+        const priorityIcons = { high: '🔴', medium: '🟡', low: '🟢' };
+        return `
+            <div class="emergency-contact-card ${contact.priority}">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                    <div>
+                        <h4 style="margin: 0;">${contact.name}</h4>
+                        <p style="color: #666; margin: 0.25rem 0;">${contact.relationship}</p>
+                        <p style="color: #666; margin: 0.25rem 0;">${priorityIcons[contact.priority]} ${contact.priority.toUpperCase()} Priority</p>
+                    </div>
+                    <button class="btn-danger" onclick="deleteEmergencyContact('${contact.id}')" title="Delete contact">🗑️</button>
+                </div>
+                <div class="emergency-quick-call">
+                    <p style="margin: 0.5rem 0;"><strong>📱 Phone:</strong> <a href="tel:${contact.phone}" style="color: #667eea;">${contact.phone}</a></p>
+                    ${contact.email ? `<p style="margin: 0.5rem 0;"><strong>📧 Email:</strong> <a href="mailto:${contact.email}" style="color: #667eea;">${contact.email}</a></p>` : ''}
+                    <button class="btn-primary" onclick="callEmergency('${contact.phone}')" style="margin-top: 1rem;">📞 Call Now</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function callEmergency(phoneNumber) {
+    if (confirm(`Call ${phoneNumber}?`)) {
+        window.location.href = `tel:${phoneNumber}`;
+    }
+}
+
+function deleteEmergencyContact(contactId) {
+    if (!confirm('Delete this emergency contact?')) return;
+    
+    const contacts = JSON.parse(localStorage.getItem('emergencyContacts') || '[]');
+    const filtered = contacts.filter(c => c.id !== contactId);
+    localStorage.setItem('emergencyContacts', JSON.stringify(filtered));
+    loadEmergencyContacts();
+}
+
+// ============================================
+// FEATURE 8: DOCTOR FEATURES - APPOINTMENT CALENDAR
+// ============================================
+
+function loadAppointmentCalendar() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const calendarView = document.getElementById('appointment-calendar-view');
+    if (!calendarView) return;
+    
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const doctorAppointments = appointments.filter(apt => apt.doctorEmail === userData.email);
+    
+    // Get current month
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Build calendar
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>${now.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+            <div>
+                <button class="btn-secondary" onclick="changeCalendarMonth(-1)">← Previous</button>
+                <button class="btn-secondary" onclick="changeCalendarMonth(1)" style="margin-left: 0.5rem;">Next →</button>
+            </div>
+        </div>
+        <div class="calendar-header" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-bottom: 0.5rem;">
+            ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => `<div style="text-align: center; font-weight: 600; color: #667eea;">${day}</div>`).join('')}
+        </div>
+        <div class="appointment-calendar">
+    `;
+    
+    // Empty cells for days before month starts
+    for (let i = 0; i < firstDay; i++) {
+        html += '<div class="calendar-day"></div>';
+    }
+    
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayAppointments = doctorAppointments.filter(apt => apt.date === dateStr);
+        const isToday = now.getDate() === day && now.getMonth() === currentMonth && now.getFullYear() === currentYear;
+        const hasAppointment = dayAppointments.length > 0;
+        
+        html += `
+            <div class="calendar-day ${isToday ? 'today' : ''} ${hasAppointment ? 'has-appointment' : ''}" 
+                 onclick="showDayAppointments('${dateStr}')">
+                <div class="calendar-day-number">${day}</div>
+                ${hasAppointment ? '<div class="calendar-appointment-dot"></div>' : ''}
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    calendarView.innerHTML = html;
+}
+
+function changeCalendarMonth(direction) {
+    // Store current month in a global variable or localStorage
+    if (!window.calendarMonth) {
+        window.calendarMonth = new Date().getMonth();
+        window.calendarYear = new Date().getFullYear();
+    }
+    
+    window.calendarMonth += direction;
+    if (window.calendarMonth < 0) {
+        window.calendarMonth = 11;
+        window.calendarYear--;
+    } else if (window.calendarMonth > 11) {
+        window.calendarMonth = 0;
+        window.calendarYear++;
+    }
+    
+    // Rebuild calendar with new month
+    loadAppointmentCalendarForMonth(window.calendarMonth, window.calendarYear);
+}
+
+function loadAppointmentCalendarForMonth(month, year) {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const calendarView = document.getElementById('appointment-calendar-view');
+    if (!calendarView) return;
+    
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const doctorAppointments = appointments.filter(apt => apt.doctorEmail === userData.email);
+    
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const now = new Date();
+    
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>${new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+            <div>
+                <button class="btn-secondary" onclick="changeCalendarMonth(-1)">← Previous</button>
+                <button class="btn-secondary" onclick="changeCalendarMonth(1)" style="margin-left: 0.5rem;">Next →</button>
+            </div>
+        </div>
+        <div class="calendar-header" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; margin-bottom: 0.5rem;">
+            ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => `<div style="text-align: center; font-weight: 600; color: #667eea;">${day}</div>`).join('')}
+        </div>
+        <div class="appointment-calendar">
+    `;
+    
+    for (let i = 0; i < firstDay; i++) {
+        html += '<div class="calendar-day"></div>';
+    }
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayAppointments = doctorAppointments.filter(apt => apt.date === dateStr);
+        const isToday = now.getDate() === day && now.getMonth() === month && now.getFullYear() === year;
+        const hasAppointment = dayAppointments.length > 0;
+        
+        html += `
+            <div class="calendar-day ${isToday ? 'today' : ''} ${hasAppointment ? 'has-appointment' : ''}" 
+                 onclick="showDayAppointments('${dateStr}')">
+                <div class="calendar-day-number">${day}</div>
+                ${hasAppointment ? `<div class="calendar-appointment-dot"></div>` : ''}
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    calendarView.innerHTML = html;
+}
+
+function showDayAppointments(dateStr) {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const dayAppointments = appointments.filter(apt => 
+        apt.doctorEmail === userData.email && apt.date === dateStr
+    ).sort((a, b) => a.time.localeCompare(b.time));
+    
+    if (dayAppointments.length === 0) {
+        alert(`No appointments on ${formatDate(dateStr)}`);
+        return;
+    }
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2>📅 Appointments - ${formatDate(dateStr)}</h2>
+            <div style="margin-top: 1rem;">
+                ${dayAppointments.map(apt => `
+                    <div class="appointment-card" style="margin-bottom: 1rem;">
+                        <div class="appointment-card-header">
+                            <h4>👤 ${apt.patientName || apt.patientEmail}</h4>
+                            <span class="appointment-status ${apt.status}">${apt.status}</span>
+                        </div>
+                        <div class="appointment-details">
+                            <div class="appointment-detail-item">
+                                <span>⏰</span>
+                                <span>${apt.time}</span>
+                            </div>
+                            ${apt.reason ? `
+                            <div class="appointment-detail-item">
+                                <span>💬</span>
+                                <span>${apt.reason}</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// ============================================
+// FEATURE 9: DOCTOR - MY PATIENTS
+// ============================================
+
+function loadMyPatients() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const patientsList = document.getElementById('patients-list');
+    if (!patientsList) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const patientSet = new Set();
+    
+    consultations.forEach(c => {
+        if (c.doctorEmail === userData.email && c.patientEmail) {
+            patientSet.add(c.patientEmail);
+        }
+    });
+    
+    appointments.forEach(apt => {
+        if (apt.doctorEmail === userData.email && apt.patientEmail) {
+            patientSet.add(apt.patientEmail);
+        }
+    });
+    
+    const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    const patients = Array.from(patientSet).map(email => {
+        const user = allUsers[email];
+        const consultationsCount = consultations.filter(c => c.doctorEmail === userData.email && c.patientEmail === email).length;
+        const appointmentsCount = appointments.filter(apt => apt.doctorEmail === userData.email && apt.patientEmail === email).length;
+        
+        return {
+            email: email,
+            name: user?.user_data?.name || 'Patient',
+            contact: user?.user_data?.contact || 'N/A',
+            consultationsCount: consultationsCount,
+            appointmentsCount: appointmentsCount,
+            lastConsultation: consultations.filter(c => c.doctorEmail === userData.email && c.patientEmail === email)
+                .sort((a, b) => new Date(b.requestedDate || b.createdAt) - new Date(a.requestedDate || a.createdAt))[0]
+        };
+    });
+    
+    if (patients.length === 0) {
+        patientsList.innerHTML = '<p class="empty-state">No patients yet. Patients will appear here after consultations or appointments.</p>';
+        return;
+    }
+    
+    patientsList.innerHTML = patients.map(patient => {
+        return `
+            <div class="patient-card" onclick="viewPatientDetails('${patient.email}')">
+                <div class="patient-card-header">
+                    <h4>👤 ${patient.name}</h4>
+                    <button class="btn-secondary" onclick="event.stopPropagation(); viewPatientMedicationSchedule('${patient.email}')" title="View medication schedule">💊</button>
+                </div>
+                <p style="color: #666; margin: 0.5rem 0;"><strong>📧 Email:</strong> ${patient.email}</p>
+                <p style="color: #666; margin: 0.5rem 0;"><strong>📱 Contact:</strong> ${patient.contact}</p>
+                <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+                    <span style="color: #667eea; font-weight: 600;">📋 ${patient.consultationsCount} Consultation(s)</span>
+                    <span style="color: #667eea; font-weight: 600;">📅 ${patient.appointmentsCount} Appointment(s)</span>
+                </div>
+                ${patient.lastConsultation ? `<p style="color: #999; font-size: 0.85rem; margin-top: 0.5rem;">Last: ${formatDateTime(patient.lastConsultation.requestedDate || patient.lastConsultation.createdAt)}</p>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function searchPatients(query) {
+    if (!query || query.trim() === '') {
+        loadMyPatients();
+        return;
+    }
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const patientsList = document.getElementById('patients-list');
+    if (!patientsList) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const patientSet = new Set();
+    
+    consultations.forEach(c => {
+        if (c.doctorEmail === userData.email && c.patientEmail) {
+            patientSet.add(c.patientEmail);
+        }
+    });
+    
+    appointments.forEach(apt => {
+        if (apt.doctorEmail === userData.email && apt.patientEmail) {
+            patientSet.add(apt.patientEmail);
+        }
+    });
+    
+    const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    const searchLower = query.toLowerCase();
+    
+    const patients = Array.from(patientSet)
+        .map(email => {
+            const user = allUsers[email];
+            return {
+                email: email,
+                name: user?.user_data?.name || 'Patient',
+                user: user
+            };
+        })
+        .filter(p => 
+            p.name.toLowerCase().includes(searchLower) || 
+            p.email.toLowerCase().includes(searchLower)
+        )
+        .map(p => {
+            const consultationsCount = consultations.filter(c => c.doctorEmail === userData.email && c.patientEmail === p.email).length;
+            const appointmentsCount = appointments.filter(apt => apt.doctorEmail === userData.email && apt.patientEmail === p.email).length;
+            return {
+                ...p,
+                consultationsCount: consultationsCount,
+                appointmentsCount: appointmentsCount
+            };
+        });
+    
+    if (patients.length === 0) {
+        patientsList.innerHTML = '<p class="empty-state">No patients found matching your search.</p>';
+        return;
+    }
+    
+    patientsList.innerHTML = patients.map(patient => `
+        <div class="patient-card" onclick="viewPatientDetails('${patient.email}')">
+            <div class="patient-card-header">
+                <h4>👤 ${patient.name}</h4>
+            </div>
+            <p style="color: #666;"><strong>📧 Email:</strong> ${patient.email}</p>
+            <div style="margin-top: 1rem;">
+                <span style="color: #667eea;">📋 ${patient.consultationsCount} Consultation(s) | 📅 ${patient.appointmentsCount} Appointment(s)</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function viewPatientDetails(patientEmail) {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    const patient = allUsers[patientEmail];
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const patientConsultations = consultations.filter(c => 
+        c.doctorEmail === userData.email && c.patientEmail === patientEmail
+    ).sort((a, b) => new Date(b.requestedDate || b.createdAt) - new Date(a.requestedDate || a.createdAt));
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2>👤 Patient Details</h2>
+            <div style="margin-top: 1rem;">
+                <p><strong>Name:</strong> ${patient?.user_data?.name || 'N/A'}</p>
+                <p><strong>Email:</strong> ${patientEmail}</p>
+                <p><strong>Contact:</strong> ${patient?.user_data?.contact || 'N/A'}</p>
+                <p><strong>Bio:</strong> ${patient?.user_data?.bio || 'N/A'}</p>
+            </div>
+            <div style="margin-top: 2rem;">
+                <h3>📋 Consultation History (${patientConsultations.length})</h3>
+                ${patientConsultations.map(c => `
+                    <div class="history-card" style="margin-top: 1rem;">
+                        <div class="history-header">
+                            <h4>${formatDateTime(c.requestedDate || c.createdAt)}</h4>
+                            <span class="status-badge status-${c.status}">${c.status}</span>
+                        </div>
+                        ${c.chatSummary ? `<p style="margin-top: 0.5rem; color: #666;">${formatMessage(c.chatSummary).substring(0, 200)}...</p>` : ''}
+                        ${c.prescription ? `<p style="margin-top: 0.5rem;"><strong>Prescription:</strong> Available</p>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+            <div style="margin-top: 2rem;">
+                <button class="btn-primary" onclick="viewPatientMedicationSchedule('${patientEmail}')">💊 View Medication Schedule</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function viewPatientMedicationSchedule(patientEmail) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+            <h2>💊 Patient Medication Schedule</h2>
+            <div id="patient-schedule-display" style="margin-top: 1rem;"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    const display = document.getElementById('patient-schedule-display');
+    if (display) {
+        displayMedicationSchedule(patientEmail, display);
+    }
+}
+
+// ============================================
+// FEATURE 10: DOCTOR REVIEWS & RATINGS
+// ============================================
+
+function loadDoctorReviews() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const reviewsList = document.getElementById('reviews-list');
+    if (!reviewsList) return;
+    
+    const reviews = JSON.parse(localStorage.getItem('doctorReviews') || '[]');
+    const doctorReviews = reviews.filter(r => r.doctorEmail === userData.email)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    if (doctorReviews.length === 0) {
+        reviewsList.innerHTML = '<p class="empty-state">No reviews yet. Reviews will appear here after patients rate consultations.</p>';
+        return;
+    }
+    
+    // Calculate average rating
+    const avgRating = doctorReviews.reduce((sum, r) => sum + r.rating, 0) / doctorReviews.length;
+    
+    reviewsList.innerHTML = `
+        <div class="stat-card" style="margin-bottom: 2rem;">
+            <div class="stat-value">${avgRating.toFixed(1)} ⭐</div>
+            <div class="stat-label">Average Rating from ${doctorReviews.length} Review(s)</div>
+        </div>
+        ${doctorReviews.map(review => `
+            <div class="review-card">
+                <div class="review-header">
+                    <div>
+                        <div class="review-rating">
+                            ${Array.from({ length: 5 }, (_, i) => 
+                                `<span class="star ${i < review.rating ? 'filled' : 'empty'}">⭐</span>`
+                            ).join('')}
+                        </div>
+                        <div class="review-patient" style="margin-top: 0.5rem;">${review.patientName || review.patientEmail}</div>
+                    </div>
+                    <div class="review-date">${formatDateTime(review.createdAt)}</div>
+                </div>
+                ${review.comment ? `<p style="margin-top: 1rem; color: #666;">${review.comment}</p>` : ''}
+                ${review.consultationId ? `<p style="margin-top: 0.5rem; font-size: 0.85rem; color: #999;">Consultation ID: ${review.consultationId}</p>` : ''}
+            </div>
+        `).join('')}
+    `;
+}
+
+// Function to submit review (called after consultation ends)
+function submitReview(consultationId, doctorEmail, rating, comment) {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const review = {
+        id: `review_${Date.now()}`,
+        consultationId: consultationId,
+        doctorEmail: doctorEmail,
+        patientEmail: userData.email,
+        patientName: userData.user_data?.name || 'Patient',
+        rating: rating,
+        comment: comment || '',
+        createdAt: new Date().toISOString()
+    };
+    
+    const reviews = JSON.parse(localStorage.getItem('doctorReviews') || '[]');
+    // Remove existing review for this consultation if any
+    const filtered = reviews.filter(r => r.consultationId !== consultationId);
+    filtered.push(review);
+    localStorage.setItem('doctorReviews', JSON.stringify(filtered));
+}
+
+// ============================================
+// FEATURE 11: DOCTOR ANALYTICS
+// ============================================
+
+function loadDoctorAnalytics() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const reviews = JSON.parse(localStorage.getItem('doctorReviews') || '[]');
+    
+    const doctorConsultations = consultations.filter(c => c.doctorEmail === userData.email);
+    const doctorAppointments = appointments.filter(apt => apt.doctorEmail === userData.email);
+    const doctorReviews = reviews.filter(r => r.doctorEmail === userData.email);
+    
+    const totalConsultations = doctorConsultations.length;
+    const acceptedConsultations = doctorConsultations.filter(c => c.status === 'accepted').length;
+    const totalAppointments = doctorAppointments.length;
+    const upcomingAppointments = doctorAppointments.filter(apt => {
+        const aptDate = new Date(`${apt.date}T${apt.time}`);
+        return aptDate > new Date() && apt.status !== 'cancelled';
+    }).length;
+    
+    const avgRating = doctorReviews.length > 0 
+        ? (doctorReviews.reduce((sum, r) => sum + r.rating, 0) / doctorReviews.length).toFixed(1)
+        : 'N/A';
+    
+    const statsHtml = `
+        <div class="analytics-grid">
+            <div class="stat-card">
+                <div class="stat-value">${totalConsultations}</div>
+                <div class="stat-label">Total Consultations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${acceptedConsultations}</div>
+                <div class="stat-label">Accepted Consultations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${totalAppointments}</div>
+                <div class="stat-label">Total Appointments</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${upcomingAppointments}</div>
+                <div class="stat-label">Upcoming Appointments</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${avgRating} ⭐</div>
+                <div class="stat-label">Average Rating</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${doctorReviews.length}</div>
+                <div class="stat-label">Total Reviews</div>
+            </div>
+        </div>
+    `;
+    
+    const consultationStatsEl = document.getElementById('consultation-stats');
+    if (consultationStatsEl) {
+        consultationStatsEl.innerHTML = statsHtml;
+    }
+    
+    // Performance overview
+    const performanceHtml = `
+        <div style="margin-top: 1rem;">
+            <h4>📈 Recent Activity</h4>
+            <p>Last 30 days:</p>
+            <ul style="list-style: none; padding: 0;">
+                <li style="padding: 0.5rem 0; border-bottom: 1px solid #e0e0e0;">📋 ${doctorConsultations.filter(c => {
+                    const date = new Date(c.requestedDate || c.createdAt);
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    return date > thirtyDaysAgo;
+                }).length} Consultations</li>
+                <li style="padding: 0.5rem 0; border-bottom: 1px solid #e0e0e0;">📅 ${doctorAppointments.filter(apt => {
+                    const date = new Date(apt.date);
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    return date > thirtyDaysAgo;
+                }).length} Appointments</li>
+                <li style="padding: 0.5rem 0;">⭐ ${doctorReviews.filter(r => {
+                    const date = new Date(r.createdAt);
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    return date > thirtyDaysAgo;
+                }).length} New Reviews</li>
+            </ul>
+        </div>
+    `;
+    
+    const performanceEl = document.getElementById('performance-overview');
+    if (performanceEl) {
+        performanceEl.innerHTML = performanceHtml;
+    }
+}
+
+// ============================================
+// FEATURE 12: REVIEW & RATING SYSTEM
+// ============================================
+
+function showReviewModal(consultationId, doctorEmail) {
+    const modal = document.getElementById('review-modal');
+    if (!modal) return;
+    
+    // Check if already reviewed
+    const reviews = JSON.parse(localStorage.getItem('doctorReviews') || '[]');
+    const existingReview = reviews.find(r => r.consultationId === consultationId);
+    if (existingReview) {
+        return; // Already reviewed
+    }
+    
+    document.getElementById('review-consultation-id').value = consultationId;
+    document.getElementById('review-doctor-email').value = doctorEmail;
+    document.getElementById('review-rating').value = '';
+    document.getElementById('review-comment').value = '';
+    
+    // Reset stars
+    document.querySelectorAll('.star-rating').forEach(star => {
+        star.style.opacity = '0.3';
+    });
+    
+    modal.style.display = 'block';
+}
+
+function closeReviewModal() {
+    const modal = document.getElementById('review-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function setRating(rating) {
+    document.getElementById('review-rating').value = rating;
+    
+    // Update star display
+    document.querySelectorAll('.star-rating').forEach((star, index) => {
+        if (index < rating) {
+            star.style.opacity = '1';
+        } else {
+            star.style.opacity = '0.3';
+        }
+    });
+}
+
+function submitReviewForm(event) {
+    event.preventDefault();
+    
+    const consultationId = document.getElementById('review-consultation-id').value;
+    const doctorEmail = document.getElementById('review-doctor-email').value;
+    const rating = parseInt(document.getElementById('review-rating').value);
+    const comment = document.getElementById('review-comment').value;
+    
+    if (!rating || rating < 1 || rating > 5) {
+        alert('Please select a rating');
+        return;
+    }
+    
+    submitReview(consultationId, doctorEmail, rating, comment);
+    closeReviewModal();
+    alert('✅ Thank you for your review!');
+    
+    // Reload reviews if doctor is viewing
+    if (document.getElementById('doctor-tab-reviews')?.classList.contains('active')) {
+        loadDoctorReviews();
+    }
+}
+
+function skipReview() {
+    closeReviewModal();
+}
+
+// ============================================
+// FEATURE 13: EXPORT CONSULTATION TRANSCRIPT
+// ============================================
+
+function exportConsultationTranscript(consultationId) {
+    const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+    const consultation = consultations.find(c => c.id === consultationId);
+    if (!consultation) {
+        alert('Consultation not found');
+        return;
+    }
+    
+    const chats = JSON.parse(localStorage.getItem('chats') || '{}');
+    const chatHistory = chats[consultation.chatId] || { messages: [] };
+    
+    const allUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+    const doctor = allUsers[consultation.doctorEmail];
+    const doctorName = doctor?.user_data?.name ? `Dr. ${doctor.user_data.name}` : consultation.doctorEmail;
+    
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    const patientName = userData?.user_data?.name || consultation.patientEmail;
+    
+    let transcript = `CONSULTATION TRANSCRIPT\n`;
+    transcript += `================================\n\n`;
+    transcript += `Patient: ${patientName}\n`;
+    transcript += `Doctor: ${doctorName}\n`;
+    transcript += `Date: ${formatDateTime(consultation.requestedDate || consultation.createdAt)}\n`;
+    transcript += `Status: ${consultation.status}\n\n`;
+    
+    if (consultation.chatSummary) {
+        transcript += `SUMMARY:\n${consultation.chatSummary}\n\n`;
+        transcript += `================================\n\n`;
+    }
+    
+    transcript += `CHAT MESSAGES:\n`;
+    transcript += `================================\n\n`;
+    
+    chatHistory.messages.forEach(msg => {
+        const sender = msg.role === 'user' ? patientName : 'AI Assistant';
+        const timestamp = msg.timestamp ? formatDateTime(msg.timestamp) : '';
+        transcript += `[${timestamp}] ${sender}:\n${msg.content}\n\n`;
+    });
+    
+    if (consultation.prescription) {
+        transcript += `\n================================\n`;
+        transcript += `PRESCRIPTION:\n`;
+        transcript += `================================\n\n`;
+        transcript += `${consultation.prescription}\n\n`;
+    }
+    
+    if (consultation.medicationSchedule) {
+        transcript += `\n================================\n`;
+        transcript += `MEDICATION SCHEDULE:\n`;
+        transcript += `================================\n\n`;
+        // You can format medication schedule here
+        transcript += `See medication schedule in the app.\n\n`;
+    }
+    
+    const blob = new Blob([transcript], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `consultation-transcript-${consultationId}-${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Consultation transcript exported successfully!');
+}
+
+// Add export button to consultation history
+function addExportButtonToConsultations() {
+    // This will be called when loading consultation history
+    setTimeout(() => {
+        document.querySelectorAll('.history-card').forEach(card => {
+            const consultationId = card.getAttribute('data-consultation-id');
+            if (consultationId && !card.querySelector('.export-btn')) {
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'btn-secondary export-btn';
+                exportBtn.style.cssText = 'margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.85rem;';
+                exportBtn.textContent = '📥 Export Transcript';
+                exportBtn.onclick = () => exportConsultationTranscript(consultationId);
+                card.appendChild(exportBtn);
+            }
+        });
+    }, 500);
+}
+
+// ============================================
+// FEATURE 14: NOTIFICATION SYSTEM
+// ============================================
+
+function showNotification(message, type = 'info', duration = 5000) {
+    // Check if notifications are enabled
+    const notifyConsultations = localStorage.getItem('notifyConsultations') !== 'false';
+    const notifyMessages = localStorage.getItem('notifyMessages') !== 'false';
+    const notifyAppointments = localStorage.getItem('notifyAppointments') !== 'false';
+    
+    if (type === 'consultation' && !notifyConsultations) return;
+    if (type === 'message' && !notifyMessages) return;
+    if (type === 'appointment' && !notifyAppointments) return;
+    
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' : 
+                      type === 'error' ? 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)' : 
+                      type === 'warning' ? 'linear-gradient(135deg, #ffc107 0%, #ff9800 100%)' :
+                      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideInRight 0.3s ease;
+        cursor: pointer;
+    `;
+    notification.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+                <p style="margin: 0; font-weight: 600;">${message}</p>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; margin-left: 1rem;">×</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto remove
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideOutRight 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, duration);
+    
+    // Remove on click
+    notification.addEventListener('click', () => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    });
+}
+
+// Add CSS animations for notifications
+if (typeof document !== 'undefined') {
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Initialize reminder checking on page load
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Start reminder checking after a short delay
+        setTimeout(() => {
+            startReminderCheck();
+        }, 2000);
+        
+        // Initialize calendar month if needed
+        window.calendarMonth = new Date().getMonth();
+        window.calendarYear = new Date().getFullYear();
+    });
 }
 

@@ -51,6 +51,20 @@
                     <button onclick="checkUserAccount()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer;">🔍 Check My Account</button>
                 </div>
 
+                <!-- Patient Dashboard Tabs -->
+                <div class="dashboard-tabs">
+                    <button class="dashboard-tab active" onclick="switchPatientTab('main')">🏠 Home</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('appointments')">📅 Appointments</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('records')">📋 Medical Records</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('health')">❤️ Health Dashboard</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('prescriptions')">💊 Prescriptions</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('reports')">📄 Medical Reports</button>
+                    <button class="dashboard-tab" onclick="switchPatientTab('emergency')">🚨 Emergency</button>
+                </div>
+
+                <!-- Main Tab Content (Existing) -->
+                <div id="patient-tab-main" class="patient-tab-content active">
+
                 <div class="patient-layout">
                     <!-- Left Side: Medicine Schedule -->
                     <div class="medicine-schedule-panel">
@@ -116,6 +130,97 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                <!-- End Main Tab Content -->
+
+                <!-- Appointments Tab -->
+                <div id="patient-tab-appointments" class="patient-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>📅 My Appointments</h3>
+                            <button class="btn-primary" onclick="openAppointmentModal()">➕ Book Appointment</button>
+                        </div>
+                        <div class="panel-content" id="appointments-list">
+                            <p class="empty-state">No appointments scheduled. Book an appointment to get started.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Medical Records Tab -->
+                <div id="patient-tab-records" class="patient-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>📋 Medical Records</h3>
+                            <button class="btn-secondary" onclick="exportMedicalRecords()">📥 Export Records</button>
+                        </div>
+                        <div class="panel-content" id="medical-records-list">
+                            <!-- Medical records will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health Dashboard Tab -->
+                <div id="patient-tab-health" class="patient-tab-content">
+                    <div class="health-dashboard-grid">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h3>❤️ Vital Signs</h3>
+                                <button class="btn-primary" onclick="openVitalsModal()">➕ Add Reading</button>
+                            </div>
+                            <div class="panel-content" id="vitals-display">
+                                <!-- Vitals will be displayed here -->
+                            </div>
+                        </div>
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h3>⏰ Medication Reminders</h3>
+                                <button class="btn-primary" onclick="openReminderModal()">➕ Add Reminder</button>
+                            </div>
+                            <div class="panel-content" id="reminders-list">
+                                <!-- Reminders will be displayed here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Prescriptions Tab -->
+                <div id="patient-tab-prescriptions" class="patient-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>💊 Prescription History</h3>
+                            <button class="btn-secondary" onclick="exportPrescriptions()">📥 Export</button>
+                        </div>
+                        <div class="panel-content" id="prescriptions-history-list">
+                            <!-- Prescription history will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Medical Reports Tab -->
+                <div id="patient-tab-reports" class="patient-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>📄 Medical Reports & Documents</h3>
+                            <button class="btn-primary" onclick="openReportUploadModal()">📤 Upload Report</button>
+                        </div>
+                        <div class="panel-content" id="reports-list">
+                            <!-- Medical reports will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emergency Contacts Tab -->
+                <div id="patient-tab-emergency" class="patient-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>🚨 Emergency Contacts</h3>
+                            <button class="btn-primary" onclick="openEmergencyContactModal()">➕ Add Contact</button>
+                        </div>
+                        <div class="panel-content" id="emergency-contacts-list">
+                            <!-- Emergency contacts will be displayed here -->
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Doctor Dashboard -->
@@ -124,6 +229,18 @@
                     <h1 id="doctor-welcome-message">Welcome!</h1>
                     <p id="doctor-type-display">You are logged in as a Doctor</p>
                 </div>
+
+                <!-- Doctor Dashboard Tabs -->
+                <div class="dashboard-tabs">
+                    <button class="dashboard-tab active" onclick="switchDoctorTab('main')">🏠 Home</button>
+                    <button class="dashboard-tab" onclick="switchDoctorTab('calendar')">📅 Calendar</button>
+                    <button class="dashboard-tab" onclick="switchDoctorTab('patients')">👥 My Patients</button>
+                    <button class="dashboard-tab" onclick="switchDoctorTab('reviews')">⭐ Reviews</button>
+                    <button class="dashboard-tab" onclick="switchDoctorTab('analytics')">📊 Analytics</button>
+                </div>
+
+                <!-- Main Tab Content (Existing) -->
+                <div id="doctor-tab-main" class="doctor-tab-content active">
 
                 <div class="doctor-layout">
                     <!-- Consultation Requests -->
@@ -147,6 +264,68 @@
                         </div>
                         <div class="panel-content" id="history-list">
                             <!-- History will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+                </div>
+                <!-- End Doctor Main Tab Content -->
+
+                <!-- Calendar Tab -->
+                <div id="doctor-tab-calendar" class="doctor-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>📅 Appointment Calendar</h3>
+                            <button class="btn-primary" onclick="loadAppointmentCalendar()">🔄 Refresh</button>
+                        </div>
+                        <div class="panel-content" id="appointment-calendar-view">
+                            <!-- Calendar will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- My Patients Tab -->
+                <div id="doctor-tab-patients" class="doctor-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>👥 My Patients</h3>
+                            <input type="text" id="patient-search-input" placeholder="🔍 Search patients..." oninput="searchPatients(this.value)" style="padding: 0.5rem; border: 2px solid #e0e0e0; border-radius: 8px; width: 300px;">
+                        </div>
+                        <div class="panel-content" id="patients-list">
+                            <!-- Patients list will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reviews Tab -->
+                <div id="doctor-tab-reviews" class="doctor-tab-content">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3>⭐ Patient Reviews & Ratings</h3>
+                        </div>
+                        <div class="panel-content" id="reviews-list">
+                            <!-- Reviews will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Tab -->
+                <div id="doctor-tab-analytics" class="doctor-tab-content">
+                    <div class="analytics-grid">
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h3>📊 Consultation Statistics</h3>
+                            </div>
+                            <div class="panel-content" id="consultation-stats">
+                                <!-- Statistics will be displayed here -->
+                            </div>
+                        </div>
+                        <div class="panel">
+                            <div class="panel-header">
+                                <h3>📈 Performance Overview</h3>
+                            </div>
+                            <div class="panel-content" id="performance-overview">
+                                <!-- Performance data will be displayed here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -327,6 +506,218 @@
                     <button class="btn-danger" onclick="deleteAccount()" style="margin-top: 1rem;">🗑️ Delete Account</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Appointment Booking Modal -->
+    <div id="appointment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAppointmentModal()">&times;</span>
+            <h2>📅 Book Appointment</h2>
+            <form id="appointment-form" onsubmit="bookAppointment(event)">
+                <div class="form-group">
+                    <label for="appointment-doctor">👨‍⚕️ Select Doctor</label>
+                    <select id="appointment-doctor" required>
+                        <option value="">Choose a doctor...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="appointment-date">📅 Date</label>
+                    <input type="date" id="appointment-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="appointment-time">⏰ Time</label>
+                    <input type="time" id="appointment-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="appointment-reason">💬 Reason for Visit</label>
+                    <textarea id="appointment-reason" rows="4" placeholder="Brief description of the reason for appointment..."></textarea>
+                </div>
+                <button type="submit" class="btn-primary">📅 Book Appointment</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vitals Modal -->
+    <div id="vitals-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeVitalsModal()">&times;</span>
+            <h2>❤️ Add Vital Signs</h2>
+            <form id="vitals-form" onsubmit="saveVitals(event)">
+                <div class="form-group">
+                    <label for="vitals-date">📅 Date</label>
+                    <input type="date" id="vitals-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="vitals-blood-pressure">🩺 Blood Pressure</label>
+                    <input type="text" id="vitals-blood-pressure" placeholder="e.g., 120/80">
+                </div>
+                <div class="form-group">
+                    <label for="vitals-heart-rate">❤️ Heart Rate (BPM)</label>
+                    <input type="number" id="vitals-heart-rate" placeholder="e.g., 72">
+                </div>
+                <div class="form-group">
+                    <label for="vitals-temperature">🌡️ Temperature (°F)</label>
+                    <input type="number" step="0.1" id="vitals-temperature" placeholder="e.g., 98.6">
+                </div>
+                <div class="form-group">
+                    <label for="vitals-weight">⚖️ Weight (lbs)</label>
+                    <input type="number" step="0.1" id="vitals-weight" placeholder="e.g., 150">
+                </div>
+                <div class="form-group">
+                    <label for="vitals-notes">📝 Notes</label>
+                    <textarea id="vitals-notes" rows="3" placeholder="Any additional notes..."></textarea>
+                </div>
+                <button type="submit" class="btn-primary">💾 Save Vitals</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Medication Reminder Modal -->
+    <div id="reminder-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeReminderModal()">&times;</span>
+            <h2>⏰ Add Medication Reminder</h2>
+            <form id="reminder-form" onsubmit="saveReminder(event)">
+                <div class="form-group">
+                    <label for="reminder-medication">💊 Medication Name</label>
+                    <input type="text" id="reminder-medication" required placeholder="e.g., Paracetamol 500mg">
+                </div>
+                <div class="form-group">
+                    <label for="reminder-time">⏰ Time</label>
+                    <input type="time" id="reminder-time" required>
+                </div>
+                <div class="form-group">
+                    <label for="reminder-days">📅 Days</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <label><input type="checkbox" name="reminder-day" value="monday"> Mon</label>
+                        <label><input type="checkbox" name="reminder-day" value="tuesday"> Tue</label>
+                        <label><input type="checkbox" name="reminder-day" value="wednesday"> Wed</label>
+                        <label><input type="checkbox" name="reminder-day" value="thursday"> Thu</label>
+                        <label><input type="checkbox" name="reminder-day" value="friday"> Fri</label>
+                        <label><input type="checkbox" name="reminder-day" value="saturday"> Sat</label>
+                        <label><input type="checkbox" name="reminder-day" value="sunday"> Sun</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reminder-dosage">💉 Dosage</label>
+                    <input type="text" id="reminder-dosage" placeholder="e.g., 1 tablet">
+                </div>
+                <button type="submit" class="btn-primary">💾 Save Reminder</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Medical Report Upload Modal -->
+    <div id="report-upload-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeReportUploadModal()">&times;</span>
+            <h2>📄 Upload Medical Report</h2>
+            <form id="report-upload-form" onsubmit="uploadReport(event)">
+                <div class="form-group">
+                    <label for="report-title">📋 Report Title</label>
+                    <input type="text" id="report-title" required placeholder="e.g., Blood Test Results, X-Ray Report">
+                </div>
+                <div class="form-group">
+                    <label for="report-date">📅 Date</label>
+                    <input type="date" id="report-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="report-type">🏥 Report Type</label>
+                    <select id="report-type" required>
+                        <option value="">Select type...</option>
+                        <option value="Lab Test">Lab Test</option>
+                        <option value="X-Ray">X-Ray</option>
+                        <option value="MRI">MRI</option>
+                        <option value="CT Scan">CT Scan</option>
+                        <option value="Ultrasound">Ultrasound</option>
+                        <option value="Prescription">Prescription</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="report-file">📎 Upload File (Image/PDF)</label>
+                    <input type="file" id="report-file" accept="image/*,.pdf" required>
+                    <small>Supported formats: JPG, PNG, PDF</small>
+                </div>
+                <div class="form-group">
+                    <label for="report-notes">📝 Notes</label>
+                    <textarea id="report-notes" rows="3" placeholder="Any additional information about this report..."></textarea>
+                </div>
+                <button type="submit" class="btn-primary">📤 Upload Report</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Review/Rating Modal -->
+    <div id="review-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeReviewModal()">&times;</span>
+            <h2>⭐ Rate Your Consultation</h2>
+            <form id="review-form" onsubmit="submitReviewForm(event)">
+                <input type="hidden" id="review-consultation-id">
+                <input type="hidden" id="review-doctor-email">
+                <div class="form-group">
+                    <label>⭐ Rating</label>
+                    <div id="star-rating-container" style="display: flex; gap: 0.5rem; font-size: 2rem; margin: 1rem 0;">
+                        <span class="star-rating" data-rating="1" onclick="setRating(1)" style="cursor: pointer; opacity: 0.3;">⭐</span>
+                        <span class="star-rating" data-rating="2" onclick="setRating(2)" style="cursor: pointer; opacity: 0.3;">⭐</span>
+                        <span class="star-rating" data-rating="3" onclick="setRating(3)" style="cursor: pointer; opacity: 0.3;">⭐</span>
+                        <span class="star-rating" data-rating="4" onclick="setRating(4)" style="cursor: pointer; opacity: 0.3;">⭐</span>
+                        <span class="star-rating" data-rating="5" onclick="setRating(5)" style="cursor: pointer; opacity: 0.3;">⭐</span>
+                    </div>
+                    <input type="hidden" id="review-rating" required>
+                </div>
+                <div class="form-group">
+                    <label for="review-comment">💬 Your Feedback (Optional)</label>
+                    <textarea id="review-comment" rows="4" placeholder="Share your experience..."></textarea>
+                </div>
+                <button type="submit" class="btn-primary">💾 Submit Review</button>
+                <button type="button" class="btn-secondary" onclick="skipReview()" style="margin-top: 0.5rem;">Skip</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Emergency Contact Modal -->
+    <div id="emergency-contact-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEmergencyContactModal()">&times;</span>
+            <h2>🚨 Add Emergency Contact</h2>
+            <form id="emergency-contact-form" onsubmit="saveEmergencyContact(event)">
+                <div class="form-group">
+                    <label for="emergency-name">👤 Name</label>
+                    <input type="text" id="emergency-name" required placeholder="Contact's full name">
+                </div>
+                <div class="form-group">
+                    <label for="emergency-relationship">👥 Relationship</label>
+                    <select id="emergency-relationship" required>
+                        <option value="">Select relationship...</option>
+                        <option value="Family Member">Family Member</option>
+                        <option value="Friend">Friend</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Parent">Parent</option>
+                        <option value="Sibling">Sibling</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="emergency-phone">📱 Phone Number</label>
+                    <input type="tel" id="emergency-phone" required placeholder="+1 234 567 8900">
+                </div>
+                <div class="form-group">
+                    <label for="emergency-email">📧 Email (Optional)</label>
+                    <input type="email" id="emergency-email" placeholder="contact@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="emergency-priority">⚡ Priority</label>
+                    <select id="emergency-priority" required>
+                        <option value="high">🔴 High (Primary)</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="low">🟢 Low</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">💾 Save Contact</button>
+            </form>
         </div>
     </div>
 
