@@ -61,6 +61,9 @@ function loadDashboard() {
         document.getElementById('welcome-message').textContent = `👋 Welcome, ${patientName}!`;
         document.getElementById('user-type-display').textContent = 'You are logged in as a Patient';
         console.log('Loaded patient dashboard');
+        
+        // Load medicine schedule
+        loadMedicineSchedule();
     } else {
         document.getElementById('patient-dashboard').style.display = 'none';
         document.getElementById('doctor-dashboard').style.display = 'block';
@@ -744,8 +747,157 @@ function showConsultationOption() {
     `;
 }
 
-// Medicine Schedule Functions
+// Medicine Schedule Functions - Enhanced to show prescriptions and reminders
 function loadMedicineSchedule() {
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (!userData) return;
+    
+    const scheduleList = document.getElementById('medicine-schedule-list');
+    if (!scheduleList) return;
+    
+    const patientEmail = userData.email;
+    
+    // Get medication schedules from prescriptions (doctor-prescribed)
+    const schedules = getMedicationSchedule(patientEmail);
+    
+    // Get medical reminders (patient-set)
+    const reminders = JSON.parse(localStorage.getItem('medicationReminders') || '[]');
+    const userReminders = reminders.filter(r => r.patientEmail === patientEmail && r.enabled);
+    
+    // Combine both sources
+    let allMedications = [];
+    
+    // Add medications from prescriptions
+    schedules.forEach(schedule => {
+        schedule.medications.forEach(med => {
+            allMedications.push({
+                ...med,
+                source: 'prescription',
+                consultationId: schedule.consultationId,
+                doctorEmail: schedule.doctorEmail,
+                createdAt: schedule.createdAt
+            });
+        });
+    });
+    
+    // Add medications from reminders
+    userReminders.forEach(reminder => {
+        reminder.days.forEach(day => {
+            allMedications.push({
+                name: reminder.medication,
+                dosage: reminder.dosage || 'As prescribed',
+                time: reminder.time,
+                timeOfDay: getTimeOfDayFromTime(reminder.time),
+                source: 'reminder',
+                reminderId: reminder.id,
+                days: [day]
+            });
+        });
+    });
+    
+    if (allMedications.length === 0) {
+        scheduleList.innerHTML = `
+            <div class="empty-state" style="padding: 2rem; text-align: center; color: #666;">
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">💊 No medications scheduled</p>
+                <p style="font-size: 0.9rem;">Medications from doctor prescriptions and your reminders will appear here.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Group by time of day
+    const groupedByTime = {
+        morning: [],
+        afternoon: [],
+        evening: [],
+        night: []
+    };
+    
+    allMedications.forEach(med => {
+        const timeOfDay = med.timeOfDay || inferTimeOfDay(med.time || '');
+        const timeKey = timeOfDay === 'morning' ? 'morning' : 
+                       timeOfDay === 'afternoon' ? 'afternoon' :
+                       timeOfDay === 'evening' ? 'evening' : 'night';
+        
+        // Check for duplicates
+        const exists = groupedByTime[timeKey].some(existing => 
+            existing.name.toLowerCase() === med.name.toLowerCase() && 
+            existing.time === med.time &&
+            existing.source === med.source
+        );
+        
+        if (!exists) {
+            groupedByTime[timeKey].push(med);
+        }
+    });
+    
+    // Build display
+    let html = '<div class="medicine-schedule-display">';
+    
+    const timeLabels = {
+        morning: { label: '🌅 Morning', defaultTime: '08:00' },
+        afternoon: { label: '☀️ Afternoon', defaultTime: '14:00' },
+        evening: { label: '🌆 Evening', defaultTime: '18:00' },
+        night: { label: '🌙 Night', defaultTime: '20:00' }
+    };
+    
+    let hasAnyMeds = false;
+    Object.keys(timeLabels).forEach(timeKey => {
+        if (groupedByTime[timeKey].length > 0) {
+            hasAnyMeds = true;
+            const { label, defaultTime } = timeLabels[timeKey];
+            const meds = groupedByTime[timeKey];
+            
+            html += `<div class="medication-time-group" style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">`;
+            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">`;
+            html += `<h4 style="margin: 0; color: #333; font-size: 1rem;">${label}</h4>`;
+            html += `<span style="color: #667eea; font-weight: 600; font-size: 0.9rem;">${meds[0].time || defaultTime}</span>`;
+            html += `</div>`;
+            
+            html += `<div class="medication-list">`;
+            meds.forEach(med => {
+                const sourceBadge = med.source === 'prescription' 
+                    ? '<span style="background: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">👨‍⚕️ Prescribed</span>'
+                    : '<span style="background: #ffc107; color: #333; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">⏰ Reminder</span>';
+                
+                html += `<div class="medication-item" style="background: white; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 6px; border-left: 3px solid #667eea;">`;
+                html += `<div style="display: flex; align-items: center; justify-content: space-between;">`;
+                html += `<div class="medication-name" style="font-weight: 600; color: #333; font-size: 0.95rem;">💊 ${med.name}</div>`;
+                html += `${sourceBadge}`;
+                html += `</div>`;
+                if (med.dosage && med.dosage.trim()) {
+                    html += `<div class="medication-dosage" style="color: #666; font-size: 0.85rem; margin-top: 0.25rem;">💉 ${med.dosage}</div>`;
+                }
+                html += `<div class="medication-time" style="color: #999; font-size: 0.8rem; margin-top: 0.25rem;">⏰ ${med.time || defaultTime}</div>`;
+                html += `</div>`;
+            });
+            html += `</div>`;
+            html += `</div>`;
+        }
+    });
+    
+    if (!hasAnyMeds) {
+        html += `<div class="empty-state" style="padding: 2rem; text-align: center; color: #666;">`;
+        html += `<p>No medications scheduled for today.</p>`;
+        html += `</div>`;
+    }
+    
+    html += '</div>';
+    scheduleList.innerHTML = html;
+}
+
+// Helper function to get time of day from time string
+function getTimeOfDayFromTime(timeStr) {
+    if (!timeStr) return 'morning';
+    const hour = parseInt(timeStr.split(':')[0]);
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+}
+
+// Old function kept for backward compatibility
+function loadOldMedicineSchedule() {
     const medicines = JSON.parse(localStorage.getItem('medicineSchedule') || '[]');
     const scheduleList = document.getElementById('medicine-schedule-list');
     
@@ -3265,6 +3417,14 @@ async function endVideoCall() {
     loadConsultationRequests();
     loadConsultationHistory();
     
+    // Refresh medicine schedule after call ends (prescription may have been converted)
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (userData && (userData.user_type === 'Patient' || userData.user_type?.toLowerCase() === 'patient')) {
+        setTimeout(() => {
+            loadMedicineSchedule();
+        }, 1000);
+    }
+    
     // Show review modal for patients after consultation ends
     if (savedConsultationId && savedDoctorEmail) {
         const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
@@ -4351,6 +4511,14 @@ async function convertPrescriptionToSchedule(consultation) {
         localStorage.setItem('consultations', JSON.stringify(allConsultations));
     }
     
+    // Refresh medicine schedule display for patient
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (userData && consultation.patientEmail === userData.email) {
+        setTimeout(() => {
+            loadMedicineSchedule();
+        }, 500);
+    }
+    
     return medicationSchedule;
 }
 
@@ -5011,6 +5179,7 @@ function saveReminder(event) {
     closeReminderModal();
     document.getElementById('reminder-form').reset();
     loadReminders();
+    loadMedicineSchedule(); // Refresh medicine schedule panel
     startReminderCheck();
 }
 
@@ -5057,6 +5226,7 @@ function toggleReminder(reminderId) {
         reminder.enabled = !reminder.enabled;
         localStorage.setItem('medicationReminders', JSON.stringify(reminders));
         loadReminders();
+        loadMedicineSchedule(); // Refresh medicine schedule panel
     }
 }
 
@@ -5067,6 +5237,7 @@ function deleteReminder(reminderId) {
     const filtered = reminders.filter(r => r.id !== reminderId);
     localStorage.setItem('medicationReminders', JSON.stringify(filtered));
     loadReminders();
+    loadMedicineSchedule(); // Refresh medicine schedule panel
 }
 
 // Check for medication reminders
