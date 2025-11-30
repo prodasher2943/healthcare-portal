@@ -2470,6 +2470,12 @@ function createPeerConnection() {
     
     peerConnection = new RTCPeerConnection(pcConfig);
     
+    // CRITICAL: Initialize remoteStream BEFORE any tracks arrive
+    if (!remoteStream) {
+        remoteStream = new MediaStream();
+        console.log('✅ Initialized empty remote stream for incoming tracks');
+    }
+    
     // Handle remote stream - can receive multiple tracks (audio + video)
     peerConnection.ontrack = (event) => {
         console.log('📹 Received remote track:', event.track.kind, 'Streams:', event.streams.length);
@@ -2482,60 +2488,30 @@ function createPeerConnection() {
         });
         
         const track = event.track;
-        const incomingStreams = event.streams || [];
         
-        // CRITICAL: Use the stream from the event directly (most reliable WebRTC pattern)
-        // The stream from the event already contains all tracks from the sender
-        let streamToUse = null;
-        
-        if (incomingStreams.length > 0) {
-            // Use the first stream from the event - it already has all tracks
-            streamToUse = incomingStreams[0];
-            console.log(`✅ Using stream from event (has ${streamToUse.getTracks().length} track(s))`);
-            
-            // Log all tracks in the incoming stream
-            streamToUse.getTracks().forEach(t => {
-                console.log(`   - Incoming ${t.kind} track: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`);
-            });
-        } else {
-            // Fallback: build up stream manually (shouldn't happen, but just in case)
-            console.warn('⚠️ No streams in event - building stream manually');
-            if (!remoteStream) {
-                remoteStream = new MediaStream();
-            }
-            streamToUse = remoteStream;
-            
-            // Check if track already exists
-            const existingTrack = remoteStream.getTracks().find(
-                t => t.id === track.id
-            );
-            
-            if (!existingTrack) {
-                console.log(`✅ Adding remote ${track.kind} track (id: ${track.id}) to stream`);
-                remoteStream.addTrack(track);
-            } else {
-                console.log(`⚠️ Remote ${track.kind} track already exists (id: ${track.id})`);
-            }
+        // CRITICAL: Ensure remoteStream exists (should already be initialized)
+        if (!remoteStream) {
+            remoteStream = new MediaStream();
+            console.log('⚠️ Remote stream was null, created new one');
         }
         
-        // CRITICAL: Consolidate all tracks into a single remote stream
-        // This ensures all tracks (audio + video) are in one stream for the video element
-        if (streamToUse) {
-            // If we already have a remote stream, merge tracks
-            if (remoteStream && remoteStream !== streamToUse) {
-                // Merge tracks from streamToUse into remoteStream
-                streamToUse.getTracks().forEach(track => {
-                    const existing = remoteStream.getTracks().find(rt => rt.id === track.id);
-                    if (!existing) {
-                        console.log(`📥 Merging ${track.kind} track into remote stream`);
-                        remoteStream.addTrack(track);
-                    }
-                });
-            } else {
-                // Use the stream directly
-                remoteStream = streamToUse;
-            }
+        // CRITICAL: Check if this track already exists in our stream
+        const existingTrack = remoteStream.getTracks().find(t => t.id === track.id);
+        if (existingTrack) {
+            console.log(`⚠️ Track ${track.kind} (id: ${track.id}) already in remote stream, skipping`);
+            return;
         }
+        
+        // CRITICAL: Add track to our consolidated remote stream
+        remoteStream.addTrack(track);
+        console.log(`✅ Added ${track.kind} track (id: ${track.id}) to remote stream`);
+        
+        // Log all tracks in the stream now
+        const currentTracks = remoteStream.getTracks();
+        console.log(`📊 Remote stream now has ${currentTracks.length} track(s):`);
+        currentTracks.forEach(t => {
+            console.log(`   - ${t.kind} track: id=${t.id}, enabled=${t.enabled}, readyState=${t.readyState}`);
+        });
         
         // Log track state changes
         track.onended = () => {
@@ -2557,17 +2533,23 @@ function createPeerConnection() {
             return;
         }
         
-        // CRITICAL: Update remote video element with the stream
-        const trackCount = remoteStream.getTracks().length;
-        console.log(`📺 Updating remote video element with stream (${trackCount} tracks)`);
-        
-        // Get all tracks for logging
+        // CRITICAL: Get all tracks for logging and display
         const audioTracks = remoteStream.getAudioTracks();
         const videoTracks = remoteStream.getVideoTracks();
         
-        console.log(`📊 Remote stream has ${audioTracks.length} audio track(s) and ${videoTracks.length} video track(s)`);
+        console.log(`📊 Remote stream summary: ${audioTracks.length} audio, ${videoTracks.length} video`);
         
-        // CRITICAL: Set the stream on the video element FIRST
+        // CRITICAL: Update video element EVERY TIME a track arrives
+        // This ensures the video element always has the latest stream with all tracks
+        console.log('📺 Updating remote video element with consolidated stream...');
+        
+        // Stop any existing stream tracks on the video element first
+        if (remoteVideo.srcObject && remoteVideo.srcObject !== remoteStream) {
+            console.log('🔄 Replacing existing stream on video element');
+            remoteVideo.srcObject.getTracks().forEach(t => t.stop());
+        }
+        
+        // Set the consolidated stream
         remoteVideo.srcObject = remoteStream;
         
         // CRITICAL: Configure video element for proper playback
