@@ -283,21 +283,21 @@
                 <h3>Notification Preferences</h3>
                 <div class="settings-option">
                     <label>
-                        <input type="checkbox" id="notify-consultations" checked>
+                        <input type="checkbox" id="notify-consultations" checked onchange="localStorage.setItem('notifyConsultations', this.checked); console.log('✅ Consultation notifications:', this.checked ? 'enabled' : 'disabled');">
                         <span>📞 Consultation Requests</span>
                     </label>
                     <small>Get notified when someone requests a consultation.</small>
                 </div>
                 <div class="settings-option">
                     <label>
-                        <input type="checkbox" id="notify-messages" checked>
+                        <input type="checkbox" id="notify-messages" checked onchange="localStorage.setItem('notifyMessages', this.checked); console.log('✅ Message notifications:', this.checked ? 'enabled' : 'disabled');">
                         <span>💬 Chat Messages</span>
                     </label>
                     <small>Receive notifications for new chat messages.</small>
                 </div>
                 <div class="settings-option">
                     <label>
-                        <input type="checkbox" id="notify-appointments" checked>
+                        <input type="checkbox" id="notify-appointments" checked onchange="localStorage.setItem('notifyAppointments', this.checked); console.log('✅ Appointment notifications:', this.checked ? 'enabled' : 'disabled');">
                         <span>📅 Appointments</span>
                     </label>
                     <small>Get reminders for upcoming appointments.</small>
@@ -309,14 +309,14 @@
                 <h3>Privacy Settings</h3>
                 <div class="settings-option">
                     <label>
-                        <input type="checkbox" id="profile-visible" checked>
+                        <input type="checkbox" id="profile-visible" checked onchange="localStorage.setItem('profileVisible', this.checked); console.log('✅ Profile visibility:', this.checked ? 'visible' : 'hidden');">
                         <span>👁️ Profile Visibility</span>
                     </label>
                     <small>Allow others to see your profile information.</small>
                 </div>
                 <div class="settings-option">
                     <label>
-                        <input type="checkbox" id="online-status" checked>
+                        <input type="checkbox" id="online-status" checked onchange="localStorage.setItem('onlineStatus', this.checked); console.log('✅ Online status:', this.checked ? 'visible' : 'hidden');">
                         <span>🟢 Show Online Status</span>
                     </label>
                     <small>Display your online status to others.</small>

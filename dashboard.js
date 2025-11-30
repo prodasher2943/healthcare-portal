@@ -16,6 +16,12 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeTheme();
     loadSettings();
     
+    // Initialize compact mode on page load
+    const compactMode = localStorage.getItem('compactMode') === 'true';
+    if (compactMode) {
+        document.body.classList.add('compact-mode');
+    }
+    
     // Set default dates for medicine form
     const today = new Date().toISOString().split('T')[0];
     const startDateInput = document.getElementById('med-start-date');
@@ -2915,6 +2921,12 @@ async function savePrescription() {
             consultation.prescription = prescription;
             consultation.prescriptionUpdatedAt = new Date().toISOString();
             
+            // CRITICAL: Also update currentConsultation so it's available when call ends
+            if (currentConsultation && currentConsultation.id === consultation.id) {
+                currentConsultation.prescription = prescription;
+                currentConsultation.prescriptionUpdatedAt = consultation.prescriptionUpdatedAt;
+            }
+            
             // Save to localStorage
             const allConsultations = JSON.parse(localStorage.getItem('consultations') || '[]');
             const index = allConsultations.findIndex(c => c.id === consultation.id);
@@ -3213,14 +3225,32 @@ async function endVideoCall() {
     stopConsultationStatusPolling(); // Stop patient's consultation status polling
     
     // CRITICAL: Convert saved prescription to medication schedule before clearing consultation
-    if (currentConsultation && currentConsultation.prescription && currentConsultation.prescription.trim()) {
-        console.log('Converting prescription to medication schedule...');
+    // Get the latest prescription from localStorage in case it was saved but currentConsultation wasn't updated
+    let consultationToConvert = currentConsultation;
+    if (consultationToConvert && consultationToConvert.id) {
         try {
-            await convertPrescriptionToSchedule(currentConsultation);
+            const allConsultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+            const savedConsultation = allConsultations.find(c => c.id === consultationToConvert.id);
+            if (savedConsultation && savedConsultation.prescription) {
+                consultationToConvert.prescription = savedConsultation.prescription;
+                console.log('✅ Retrieved latest prescription from storage');
+            }
+        } catch (err) {
+            console.log('Could not retrieve saved prescription, using currentConsultation');
+        }
+    }
+    
+    if (consultationToConvert && consultationToConvert.prescription && consultationToConvert.prescription.trim()) {
+        console.log('Converting prescription to medication schedule...');
+        console.log('Prescription text:', consultationToConvert.prescription.substring(0, 200));
+        try {
+            await convertPrescriptionToSchedule(consultationToConvert);
             console.log('✅ Medication schedule created successfully');
         } catch (error) {
             console.error('Error converting prescription to schedule:', error);
         }
+    } else {
+        console.log('ℹ️ No prescription found to convert to medication schedule');
     }
     
     // Clear current call ID
@@ -4012,13 +4042,29 @@ async function saveProfile(event) {
         localStorage.setItem('usersDB', JSON.stringify(usersDB));
     }
     
-    // Update on server via Socket.io
+    // Update on server via API
+    try {
+        if (typeof registerUserOnServer === 'function') {
+            // Get password hash from usersDB for server update (usersDB already loaded above)
+            const existingUser = usersDB[userData.email];
+            const passwordHash = existingUser?.password_hash || userData.password_hash || '';
+            
+            await registerUserOnServer(userData.email, mergedUserData, userType, passwordHash);
+            console.log('✅ Profile updated on server');
+        }
+    } catch (error) {
+        console.error('Error updating profile on server:', error);
+        // Continue anyway - local update is done
+    }
+    
+    // Update on server via Socket.io (for real-time updates)
     if (typeof socket !== 'undefined' && socket && socket.connected) {
         socket.emit('userOnline', {
             email: userData.email,
             userData: mergedUserData,
             userType: userType
         });
+        console.log('✅ Profile update sent via Socket.io');
     }
     
     // Show success message
@@ -4037,6 +4083,21 @@ async function saveProfile(event) {
 
 // Load settings preferences
 function loadSettings() {
+    // Load theme settings
+    const themeMode = localStorage.getItem('themeMode') || 'light';
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+        themeSelect.value = themeMode;
+    }
+    
+    // Load compact mode
+    const compactMode = localStorage.getItem('compactMode') === 'true';
+    const compactModeCheck = document.getElementById('compact-mode');
+    if (compactModeCheck) {
+        compactModeCheck.checked = compactMode;
+        document.body.classList.toggle('compact-mode', compactMode);
+    }
+    
     // Load notification preferences
     const notifyConsultations = localStorage.getItem('notifyConsultations') !== 'false';
     const notifyMessages = localStorage.getItem('notifyMessages') !== 'false';
@@ -4060,41 +4121,19 @@ function loadSettings() {
     if (profileVisibleCheck) profileVisibleCheck.checked = profileVisible;
     if (onlineStatusCheck) onlineStatusCheck.checked = onlineStatus;
     
-    // Save notification preferences when changed
-    if (consultationsCheck) {
-        consultationsCheck.addEventListener('change', (e) => {
-            localStorage.setItem('notifyConsultations', e.target.checked);
-        });
-    }
-    if (messagesCheck) {
-        messagesCheck.addEventListener('change', (e) => {
-            localStorage.setItem('notifyMessages', e.target.checked);
-        });
-    }
-    if (appointmentsCheck) {
-        appointmentsCheck.addEventListener('change', (e) => {
-            localStorage.setItem('notifyAppointments', e.target.checked);
-        });
-    }
-    
-    // Save privacy settings when changed
-    if (profileVisibleCheck) {
-        profileVisibleCheck.addEventListener('change', (e) => {
-            localStorage.setItem('profileVisible', e.target.checked);
-        });
-    }
-    if (onlineStatusCheck) {
-        onlineStatusCheck.addEventListener('change', (e) => {
-            localStorage.setItem('onlineStatus', e.target.checked);
-        });
-    }
+    // Note: Settings are saved via inline onchange handlers in HTML for immediate feedback
+    // This ensures settings are saved even if JavaScript errors occur
 }
 
 // Toggle compact mode
 function toggleCompactMode() {
-    const isCompact = document.getElementById('compact-mode').checked;
+    const compactCheck = document.getElementById('compact-mode');
+    if (!compactCheck) return;
+    
+    const isCompact = compactCheck.checked;
     document.body.classList.toggle('compact-mode', isCompact);
     localStorage.setItem('compactMode', isCompact);
+    console.log('✅ Compact mode:', isCompact ? 'enabled' : 'disabled');
 }
 
 // Export user data
