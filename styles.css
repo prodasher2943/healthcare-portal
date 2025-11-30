@@ -2697,6 +2697,116 @@ body {
     flex-shrink: 0;
 }
 
+/* Medication Schedule Styles */
+.medication-schedule-container {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    color: white;
+}
+
+.medication-schedule-container h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.medication-time-group {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.medication-time-group:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.medication-time-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+.medication-time-header .time-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.medication-time-header .time-value {
+    font-size: 0.9rem;
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.medication-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.medication-item {
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border-left: 3px solid #667eea;
+}
+
+.medication-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.95);
+    margin-bottom: 0.25rem;
+}
+
+.medication-dosage {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.25rem;
+}
+
+.medication-time {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.medication-schedule-empty {
+    padding: 1rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+.medication-schedule-preview {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+    border-left: 3px solid #667eea;
+}
+
+.medication-schedule-preview h5 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.schedule-time-row {
+    padding: 0.25rem 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.schedule-time-row strong {
+    color: rgba(255, 255, 255, 0.95);
+}
+
 /* Responsive video call interface */
 @media (max-width: 1024px) {
     .video-call-sidebar {
@@ -3341,5 +3451,25 @@ body.dark-mode .request-card:hover {
 
 body.dark-mode .circle {
     background: rgba(124, 138, 255, 0.1);
+}
+
+body.dark-mode .medication-schedule-preview {
+    background: rgba(102, 126, 234, 0.15);
+    border-left-color: #7c8aff;
+}
+
+body.dark-mode .medication-schedule-preview h5,
+body.dark-mode .schedule-time-row {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+body.dark-mode .request-summary,
+body.dark-mode .patient-info {
+    background: #2a2a3e;
+    color: #e0e0e0;
+}
+
+body.dark-mode .request-summary h5 {
+    color: #e0e0e0;
 }
 
