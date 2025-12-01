@@ -2449,8 +2449,44 @@ async function startVideoCall(consultation) {
             }
         });
         
+        // Check for pending WebRTC offers that arrived before call initialization
+        if (typeof window !== 'undefined' && window.pendingWebRTCOffers && window.pendingWebRTCOffers.length > 0) {
+            console.log(`📥 Found ${window.pendingWebRTCOffers.length} pending WebRTC offer(s)`);
+            const relevantOffers = window.pendingWebRTCOffers.filter(p => 
+                p.consultationId === consultation.id || p.callId === consultation.id ||
+                String(p.consultationId) === String(consultation.id) || String(p.callId) === String(consultation.id)
+            );
+            
+            if (relevantOffers.length > 0) {
+                console.log(`✅ Processing ${relevantOffers.length} relevant pending offer(s)`);
+                // Process the most recent offer
+                const latestOffer = relevantOffers[relevantOffers.length - 1];
+                // Remove processed offers
+                window.pendingWebRTCOffers = window.pendingWebRTCOffers.filter(p => 
+                    !relevantOffers.includes(p)
+                );
+                
+                // Store the offer to process after peer connection is created
+                window.pendingOfferToProcess = latestOffer;
+            }
+        }
+        
         // Start WebRTC connection (doctor creates offer, patient waits)
         await startWebRTCConnection();
+        
+        // Process pending offer if we have one (after peer connection is ready)
+        if (typeof window !== 'undefined' && window.pendingOfferToProcess) {
+            const pendingOffer = window.pendingOfferToProcess;
+            delete window.pendingOfferToProcess;
+            
+            console.log('🔄 Processing stored pending offer now that call is initialized...');
+            // Wait a moment for peer connection to be fully ready, then process the offer
+            setTimeout(async () => {
+                if (peerConnection) {
+                    await processWebRTCOffer(pendingOffer);
+                }
+            }, 800);
+        }
     } else {
         console.warn('⚠️ Local stream not ready - WebRTC connection may have issues');
     }

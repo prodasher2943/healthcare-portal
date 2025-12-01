@@ -99,7 +99,7 @@ function initSocket() {
         // Handle status update
         if (consultation.status === 'accepted') {
             console.log('✅ Consultation accepted - starting video call...');
-            // Use setTimeout to ensure UI is ready
+            // Use shorter timeout to start call faster and catch offers
             setTimeout(() => {
                 if (typeof startVideoCall === 'function') {
                     startVideoCall(consultation);
@@ -110,7 +110,7 @@ function initSocket() {
                         loadConsultationRequests();
                     }
                 }
-            }, 500);
+            }, 100); // Reduced from 500ms to 100ms for faster call start
         } else if (consultation.status === 'rejected') {
             const consultationContent = document.getElementById('consultation-content');
             if (consultationContent) {
@@ -290,6 +290,7 @@ function initSocket() {
                           (currentConsultation.id === consultationId || currentConsultation.id === callId ||
                            String(currentConsultation.id) === String(consultationId) || String(currentConsultation.id) === String(callId)));
         
+        // Process the offer immediately if call is already started
         if (isOurCall) {
             console.log('✅ This offer is for our call - processing...');
             
@@ -465,10 +466,153 @@ function initSocket() {
             } catch (error) {
                 console.error('❌ Error handling WebRTC offer:', error);
             }
+        } else if (matchesPendingConsultation && !isOurCall) {
+            // Store offer to process when call starts
+            console.log('💾 Storing offer for later processing when call starts');
+            window.pendingWebRTCOffers.push({ callId, consultationId, offer, timestamp: Date.now() });
+            
+            // Clean up old offers (older than 30 seconds)
+            window.pendingWebRTCOffers = window.pendingWebRTCOffers.filter(
+                p => Date.now() - p.timestamp < 30000
+            );
+            
+            // Try to start the call if we have the consultation
+            try {
+                const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+                const consultation = consultations.find(c => c.id === consultationId || c.id === callId);
+                if (consultation && consultation.status === 'accepted') {
+                    console.log('🚀 Auto-starting call for pending offer...');
+                    // Small delay to ensure UI is ready
+                    setTimeout(() => {
+                        if (typeof startVideoCall === 'function') {
+                            startVideoCall(consultation);
+                        }
+                    }, 100);
+                }
+            } catch (e) {
+                console.error('Error auto-starting call:', e);
+            }
         } else {
             console.log('⚠️ Offer not for current call, ignoring');
         }
     });
+    
+    // Helper function to process WebRTC offers (can be called from dashboard.js)
+    window.processWebRTCOffer = async function({ callId, consultationId, offer }) {
+        console.log('🔄 Processing WebRTC offer:', { callId, consultationId });
+        
+        // Ensure we have the right context
+        if (typeof currentCallId === 'undefined' || !currentCallId) {
+            console.log('⚠️ currentCallId not set, setting it now...');
+            if (typeof window.currentCallId !== 'undefined') {
+                currentCallId = window.currentCallId;
+            } else {
+                currentCallId = callId || consultationId;
+            }
+        }
+        
+        if (typeof currentConsultation === 'undefined' || !currentConsultation) {
+            console.log('⚠️ currentConsultation not set, trying to find it...');
+            try {
+                const consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+                const consultation = consultations.find(c => c.id === consultationId || c.id === callId);
+                if (consultation) {
+                    currentConsultation = consultation;
+                }
+            } catch (e) {
+                console.error('Error finding consultation:', e);
+            }
+        }
+        
+        // Now process the offer using the same logic as the socket handler
+        if (typeof peerConnection === 'undefined' || !peerConnection) {
+            console.log('⚠️ Peer connection not ready, creating now...');
+            if (typeof createPeerConnection === 'function') {
+                createPeerConnection();
+            } else {
+                console.error('⚠️ createPeerConnection function not available');
+                return;
+            }
+        }
+        
+        // Ensure local stream is ready
+        if (typeof localStream === 'undefined' || !localStream) {
+            console.log('⚠️ Local stream not initialized - initializing now...');
+            if (typeof initializeVideoStreams === 'function') {
+                try {
+                    await initializeVideoStreams();
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    if (typeof localStream === 'undefined' || !localStream) {
+                        localStream = new MediaStream();
+                    }
+                } catch (err) {
+                    console.error('❌ Failed to initialize video streams:', err);
+                    localStream = new MediaStream();
+                }
+            } else {
+                localStream = new MediaStream();
+            }
+        }
+        
+        // Add local tracks to peer connection
+        if (localStream && peerConnection) {
+            const existingSenders = peerConnection.getSenders();
+            const existingTrackIds = existingSenders.map(s => s.track?.id).filter(Boolean);
+            const allTracks = [...(localStream.getAudioTracks() || []), ...(localStream.getVideoTracks() || [])];
+            
+            allTracks.forEach(track => {
+                if (!existingTrackIds.includes(track.id)) {
+                    try {
+                        peerConnection.addTrack(track, localStream);
+                    } catch (err) {
+                        const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
+                        if (existingSender) {
+                            existingSender.replaceTrack(track).catch(e => console.error('Error replacing track:', e));
+                        }
+                    }
+                }
+            });
+        }
+        
+        try {
+            // Set remote description
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            console.log('✅ Remote description set');
+            
+            // Add pending ICE candidates
+            if (peerConnection.pendingIceCandidates && peerConnection.pendingIceCandidates.length > 0) {
+                for (const candidate of peerConnection.pendingIceCandidates) {
+                    try {
+                        await peerConnection.addIceCandidate(candidate);
+                    } catch (err) {
+                        console.error('Error adding pending ICE candidate:', err);
+                    }
+                }
+                peerConnection.pendingIceCandidates = [];
+            }
+            
+            // Create answer
+            const answer = await peerConnection.createAnswer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
+            await peerConnection.setLocalDescription(answer);
+            console.log('✅ Local description set (answer)');
+            
+            // Send answer back
+            if (typeof socket !== 'undefined' && socket && socket.connected) {
+                socket.emit('webrtcAnswer', {
+                    callId: callId || currentCallId,
+                    consultationId: consultationId || (currentConsultation ? currentConsultation.id : null),
+                    answer: answer
+                });
+                console.log('📤 Answer sent');
+            }
+        } catch (error) {
+            console.error('❌ Error processing WebRTC offer:', error);
+        }
+    };
     
     socket.on('webrtcAnswer', async ({ callId, consultationId, answer }) => {
         console.log('📥 Received WebRTC answer:', { callId, consultationId });
