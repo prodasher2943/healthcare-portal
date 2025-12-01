@@ -2630,23 +2630,48 @@ let localStream = null;
 let peerConnection = null;
 let remoteStream = null;
 // Enhanced WebRTC configuration for better cross-device connectivity
+// CRITICAL: TURN servers are ESSENTIAL for NAT traversal across different devices/networks
 const pcConfig = {
     iceServers: [
-        // Google STUN servers (free, reliable)
+        // Google STUN servers (for NAT discovery)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        // Additional STUN servers for redundancy
+        
+        // CRITICAL: TURN servers for relay when direct connection fails (cross-device)
+        // Using free public TURN servers - these relay traffic when NAT traversal fails
+        {
+            urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:80?transport=tcp',
+                'turn:openrelay.metered.ca:443?transport=tcp'
+            ],
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        {
+            urls: [
+                'turn:relay.metered.ca:80',
+                'turn:relay.metered.ca:443',
+                'turn:relay.metered.ca:80?transport=tcp',
+                'turn:relay.metered.ca:443?transport=tcp'
+            ],
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        },
+        // Additional free TURN server
+        {
+            urls: 'turn:relay1.expressturn.com:3478',
+            username: 'efJw0GfV4f47b3b4b3b4b3',
+            credential: 'efJw0GfV4f47b3b4b3b4b3'
+        },
+        // Backup STUN servers
         { urls: 'stun:stun.stunprotocol.org:3478' },
-        { urls: 'stun:stun.voiparound.com' },
-        { urls: 'stun:stun.voipbuster.com' },
-        { urls: 'stun:stun.voipstunt.com' },
-        { urls: 'stun:stun.voxgratia.org' }
+        { urls: 'stun:stun.voiparound.com' }
     ],
     iceCandidatePoolSize: 10, // Pre-gather more candidates for better connectivity
-    iceTransportPolicy: 'all', // Allow both relay and direct connections
+    iceTransportPolicy: 'all', // CRITICAL: Allow both relay (TURN) and direct connections
     bundlePolicy: 'max-bundle', // Bundle RTP and RTCP together
     rtcpMuxPolicy: 'require' // Require RTCP multiplexing
 };
@@ -3255,16 +3280,43 @@ function createPeerConnection() {
         console.log('💡 Tip: Check browser console for WebRTC errors and network tab for socket messages');
     };
     
-    // Handle ICE candidates
+    // Handle ICE candidates - CRITICAL for cross-device connectivity
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-            console.log('🧊 Sending ICE candidate');
+            // Log candidate type for debugging NAT traversal
+            const candidateType = event.candidate.candidate.includes('typ relay') ? 'RELAY (TURN)' :
+                                 event.candidate.candidate.includes('typ srflx') ? 'SERVER REFLEXIVE (STUN)' :
+                                 event.candidate.candidate.includes('typ host') ? 'HOST' : 'UNKNOWN';
+            
+            console.log(`🧊 Sending ICE candidate (${candidateType})`);
+            
             if (typeof socket !== 'undefined' && socket && socket.connected) {
                 socket.emit('iceCandidate', {
                     callId: currentCallId,
                     consultationId: currentConsultation ? currentConsultation.id : null,
                     candidate: event.candidate
                 });
+            } else {
+                console.warn('⚠️ Socket not connected, cannot send ICE candidate');
+            }
+        } else {
+            // null candidate means ICE gathering is complete
+            console.log('✅ ICE candidate gathering complete');
+            
+            // Log final connection state
+            if (peerConnection.iceGatheringState === 'complete') {
+                const localDescription = peerConnection.localDescription;
+                if (localDescription) {
+                    const sdp = localDescription.sdp || '';
+                    const hasRelay = sdp.includes('typ relay') || sdp.includes('relay');
+                    const hasSrflx = sdp.includes('typ srflx') || sdp.includes('srflx');
+                    console.log(`📊 ICE gathering summary: ${hasRelay ? 'Has RELAY candidates (TURN)' : 'No RELAY'} | ${hasSrflx ? 'Has SRFLX candidates (STUN)' : 'No SRFLX'}`);
+                    
+                    if (!hasRelay && !hasSrflx) {
+                        console.warn('⚠️ WARNING: No relay or server reflexive candidates! Cross-device connection may fail.');
+                        console.warn('   This usually means TURN/STUN servers are not accessible or not configured properly.');
+                    }
+                }
             }
         }
     };
@@ -3300,18 +3352,50 @@ function createPeerConnection() {
             }, 2000);
         } else if (peerConnection.connectionState === 'failed') {
             console.error('❌ WebRTC connection failed!');
-            console.error('   This means the peer connection could not be established.');
-            console.error('   Possible causes:');
-            console.error('   1) Network connectivity issues');
-            console.error('   2) Firewall/NAT blocking WebRTC traffic');
-            console.error('   3) STUN/TURN servers not accessible');
-            console.error('   4) Signaling issues (offer/answer not exchanged properly)');
+            console.error('   This is CRITICAL - connection cannot be established.');
+            console.error('   For cross-device calls, this usually means:');
+            console.error('   1) Both devices behind restrictive NATs/firewalls');
+            console.error('   2) TURN servers not accessible (check firewall/credentials)');
+            console.error('   3) ICE candidates not being exchanged properly');
+            console.error('   4) Network connectivity issues');
+            
+            // Detailed diagnostics
+            const localDesc = peerConnection.localDescription;
+            const remoteDesc = peerConnection.remoteDescription;
+            console.error('📊 Connection diagnostics:');
+            console.error(`   - Local description: ${localDesc ? 'set' : 'NOT SET'}`);
+            console.error(`   - Remote description: ${remoteDesc ? 'set' : 'NOT SET'}`);
+            console.error(`   - ICE connection state: ${peerConnection.iceConnectionState}`);
+            console.error(`   - Signaling state: ${peerConnection.signalingState}`);
+            
+            // Check for relay candidates
+            let hasRelay = false;
+            if (localDesc && localDesc.sdp) {
+                hasRelay = localDesc.sdp.includes('typ relay') || localDesc.sdp.includes('relay');
+            }
+            if (!hasRelay && remoteDesc && remoteDesc.sdp) {
+                hasRelay = remoteDesc.sdp.includes('typ relay') || remoteDesc.sdp.includes('relay');
+            }
+            
+            if (!hasRelay) {
+                console.error('⚠️ CRITICAL: No TURN relay candidates detected!');
+                console.error('   Cross-device calls REQUIRE TURN servers when NAT traversal fails.');
+                console.error('   Action needed: Verify TURN server configuration and accessibility.');
+            }
             
             // Try to restart ICE as last resort
             console.log('🔄 Attempting to restart ICE connection...');
             try {
                 peerConnection.restartIce();
                 console.log('✅ ICE restart initiated');
+                
+                // If still failing after restart, suggest reconnection
+                setTimeout(() => {
+                    if (peerConnection && peerConnection.connectionState === 'failed') {
+                        console.error('❌ Connection still failed after ICE restart.');
+                        console.error('   Recommendation: End call and try again, or check TURN server configuration.');
+                    }
+                }, 5000);
             } catch (e) {
                 console.error('❌ Failed to restart ICE:', e);
                 console.error('   Connection may need to be re-established');
@@ -3340,28 +3424,58 @@ function createPeerConnection() {
                 console.log(`   Receiver ${idx}: ${receiver.track?.kind || 'no track'}, enabled: ${receiver.track?.enabled}, readyState: ${receiver.track?.readyState}`);
             });
         } else if (peerConnection.iceConnectionState === 'failed') {
-            console.error('❌ ICE connection failed! This usually means:');
-            console.error('   1) Firewall/NAT blocking connection');
-            console.error('   2) STUN/TURN servers not accessible');
+            console.error('❌ ICE connection failed! This is CRITICAL for cross-device calls.');
+            console.error('   Possible causes:');
+            console.error('   1) Both devices behind restrictive NATs/firewalls (needs TURN relay)');
+            console.error('   2) TURN servers not accessible or not configured');
             console.error('   3) Network connectivity issues');
-            console.error('   Consider using TURN servers for better connectivity');
+            console.error('   4) ICE candidates not being exchanged properly');
+            
+            // Check if we have relay candidates
+            const localDesc = peerConnection.localDescription;
+            const remoteDesc = peerConnection.remoteDescription;
+            let hasRelayCandidates = false;
+            
+            if (localDesc && localDesc.sdp) {
+                hasRelayCandidates = localDesc.sdp.includes('typ relay') || localDesc.sdp.includes('relay');
+            }
+            if (!hasRelayCandidates && remoteDesc && remoteDesc.sdp) {
+                hasRelayCandidates = remoteDesc.sdp.includes('typ relay') || remoteDesc.sdp.includes('relay');
+            }
+            
+            if (!hasRelayCandidates) {
+                console.error('⚠️ CRITICAL: No TURN relay candidates found!');
+                console.error('   This means TURN servers are not working or not configured.');
+                console.error('   Cross-device calls WILL FAIL without TURN relay.');
+                console.error('   Check: 1) TURN server credentials 2) Network firewall blocking TURN');
+            }
             
             // Try to restart ICE connection
             console.log('🔄 Attempting to restart ICE connection...');
             try {
                 peerConnection.restartIce();
                 console.log('✅ ICE restart initiated');
+                
+                // Also try to recreate peer connection if restart doesn't work
+                setTimeout(() => {
+                    if (peerConnection && peerConnection.iceConnectionState === 'failed') {
+                        console.warn('⚠️ ICE still failed after restart, connection may need to be re-established');
+                    }
+                }, 5000);
             } catch (e) {
                 console.error('❌ Failed to restart ICE:', e);
             }
         } else if (peerConnection.iceConnectionState === 'disconnected') {
             console.warn('⚠️ ICE connection disconnected - attempting to reconnect...');
+            console.warn('   This often happens with cross-device calls when NAT traversal fails');
+            
             // Wait a bit and check if it recovers
             setTimeout(() => {
                 if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
                     console.log('🔄 ICE still disconnected, attempting restart...');
                     try {
                         peerConnection.restartIce();
+                        console.log('✅ ICE restart initiated for disconnected state');
                     } catch (e) {
                         console.error('❌ Failed to restart ICE:', e);
                     }
@@ -3373,6 +3487,27 @@ function createPeerConnection() {
     // Handle ICE gathering state
     peerConnection.onicegatheringstatechange = () => {
         console.log('🧊 ICE gathering state:', peerConnection.iceGatheringState);
+        
+        if (peerConnection.iceGatheringState === 'complete') {
+            // Check what types of candidates we gathered
+            const localDesc = peerConnection.localDescription;
+            if (localDesc && localDesc.sdp) {
+                const sdp = localDesc.sdp;
+                const relayCount = (sdp.match(/typ relay/g) || []).length;
+                const srflxCount = (sdp.match(/typ srflx/g) || []).length;
+                const hostCount = (sdp.match(/typ host/g) || []).length;
+                
+                console.log(`📊 ICE gathering complete: ${relayCount} RELAY, ${srflxCount} SRFLX, ${hostCount} HOST candidates`);
+                
+                if (relayCount === 0) {
+                    console.warn('⚠️ WARNING: No RELAY (TURN) candidates gathered!');
+                    console.warn('   Cross-device calls may fail if NAT traversal is required.');
+                    console.warn('   Check: TURN server configuration and network accessibility.');
+                } else {
+                    console.log('✅ TURN relay candidates available - cross-device connectivity should work!');
+                }
+            }
+        }
     };
     
     // Handle signaling state changes

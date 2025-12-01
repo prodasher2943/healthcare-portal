@@ -675,6 +675,15 @@ function initSocket() {
     });
     
     socket.on('iceCandidate', async ({ callId, consultationId, candidate }) => {
+        // Log candidate type for debugging
+        if (candidate && candidate.candidate) {
+            const candidateType = candidate.candidate.includes('typ relay') ? 'RELAY (TURN)' :
+                                 candidate.candidate.includes('typ srflx') ? 'SERVER REFLEXIVE (STUN)' :
+                                 candidate.candidate.includes('typ host') ? 'HOST' : 'UNKNOWN';
+            console.log(`🧊 Received ICE candidate (${candidateType})`);
+        } else {
+            console.log('🧊 Received ICE candidate');
+        }
         console.log('🧊 Received ICE candidate:', { callId, consultationId });
         
         // Check if this is for our current call
