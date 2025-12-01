@@ -2900,6 +2900,10 @@ function createPeerConnection() {
     }
     
     // Handle remote stream - can receive multiple tracks (audio + video)
+    // CRITICAL: Use a flag to prevent multiple simultaneous play() calls
+    let isPlayingRemoteVideo = false;
+    let playVideoTimeout = null;
+    
     peerConnection.ontrack = (event) => {
         console.log('📹 Received remote track:', event.track.kind, 'Streams:', event.streams.length);
         console.log('📹 Track details:', {
@@ -2962,21 +2966,41 @@ function createPeerConnection() {
         
         console.log(`📊 Remote stream summary: ${audioTracks.length} audio, ${videoTracks.length} video`);
         
-        // CRITICAL: Update video element EVERY TIME a track arrives
-        // This ensures the video element always has the latest stream with all tracks
-        console.log('📺 Updating remote video element with consolidated stream...');
+        // CRITICAL: Only update srcObject if it's different or doesn't exist
+        // This prevents AbortError from interrupting play() calls
+        const needsUpdate = !remoteVideo.srcObject || remoteVideo.srcObject !== remoteStream;
         
-        // Stop any existing stream tracks on the video element first
-        if (remoteVideo.srcObject && remoteVideo.srcObject !== remoteStream) {
-            console.log('🔄 Replacing existing stream on video element');
-            remoteVideo.srcObject.getTracks().forEach(t => t.stop());
+        if (needsUpdate) {
+            console.log('📺 Updating remote video element with consolidated stream...');
+            
+            // Cancel any pending play attempts
+            if (playVideoTimeout) {
+                clearTimeout(playVideoTimeout);
+                playVideoTimeout = null;
+            }
+            
+            // Stop any existing stream tracks on the video element first
+            if (remoteVideo.srcObject && remoteVideo.srcObject !== remoteStream) {
+                console.log('🔄 Replacing existing stream on video element');
+                try {
+                    remoteVideo.srcObject.getTracks().forEach(t => {
+                        // Don't stop tracks that are in our new stream
+                        if (!remoteStream.getTracks().some(nt => nt.id === t.id)) {
+                            t.stop();
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Error stopping old tracks:', e);
+                }
+            }
+            
+            // Set the consolidated stream
+            remoteVideo.srcObject = remoteStream;
+        } else {
+            console.log('ℹ️ Video element already has this stream, skipping srcObject update');
         }
         
-        // Set the consolidated stream
-        remoteVideo.srcObject = remoteStream;
-        
-        // CRITICAL: Configure video element for proper playback
-        // Remove muted attribute completely (HTML attribute muted="false" still mutes!)
+        // CRITICAL: Configure video element for proper playback (always do this)
         remoteVideo.removeAttribute('muted');
         remoteVideo.muted = false; // Must be false to hear audio
         remoteVideo.volume = 1.0;
@@ -3011,130 +3035,130 @@ function createPeerConnection() {
             }
         }
         
-        // CRITICAL: Force play immediately - don't wait
-        console.log('▶️ Attempting to play remote video...');
-        
-        // Use a function to handle playing
-        const playRemoteVideo = async () => {
-            try {
-                // CRITICAL: Ensure video is unmuted before playing
-                remoteVideo.removeAttribute('muted');
-                remoteVideo.muted = false;
-                remoteVideo.volume = 1.0;
-                
-                await remoteVideo.play();
-                console.log('✅ Remote video playing successfully');
-                
-                // Double-check audio is unmuted after play
-                if (remoteVideo.muted) {
-                    console.warn('⚠️ Video muted after play, forcing unmute...');
-                    remoteVideo.muted = false;
-                }
-                
-                // Verify tracks after play
-                console.log(`📊 Remote stream state after play:`);
-                console.log(`   - Total tracks: ${remoteStream.getTracks().length}`);
-                console.log(`   - Audio tracks: ${audioTracks.length}`);
-                console.log(`   - Video tracks: ${videoTracks.length}`);
-                
-                if (videoTracks.length > 0) {
-                    const vTrack = videoTracks[0];
-                    console.log(`   - Video track: enabled=${vTrack.enabled}, readyState=${vTrack.readyState}, muted=${vTrack.muted}`);
-                }
-                if (audioTracks.length > 0) {
-                    const aTrack = audioTracks[0];
-                    console.log(`   - Audio track: enabled=${aTrack.enabled}, readyState=${aTrack.readyState}, muted=${aTrack.muted}`);
-                    console.log(`   - Audio track settings: ${JSON.stringify(aTrack.getSettings())}`);
-                }
-                
-                // Verify video element is actually showing video
-                const hasVideoTrack = remoteVideo.srcObject && remoteVideo.srcObject.getVideoTracks().length > 0;
-                const hasAudioTrack = remoteVideo.srcObject && remoteVideo.srcObject.getAudioTracks().length > 0;
-                console.log(`   - Video element has stream: ${!!remoteVideo.srcObject}`);
-                console.log(`   - Video element has video track: ${hasVideoTrack}`);
-                console.log(`   - Video element has audio track: ${hasAudioTrack}`);
-                console.log(`   - Video element muted: ${remoteVideo.muted}`);
-                console.log(`   - Video element volume: ${remoteVideo.volume}`);
-                
-                // Diagnostic: Check if video is actually visible
-                const videoRect = remoteVideo.getBoundingClientRect();
-                console.log(`   - Video element dimensions: ${videoRect.width}x${videoRect.height}`);
-                console.log(`   - Video element visible: ${videoRect.width > 0 && videoRect.height > 0}`);
-                
-            } catch (err) {
-                console.error('❌ Remote video play error:', err);
-                console.error('   Error details:', err.message, err.name);
-                
-                // Check if it's a user interaction issue
-                if (err.name === 'NotAllowedError') {
-                    console.error('⚠️ Autoplay was blocked - video will play once user interacts with page');
-                    // Try to play on user interaction
-                    const playOnInteraction = () => {
-                        remoteVideo.play().then(() => {
-                            console.log('✅ Video started playing after user interaction');
-                            document.removeEventListener('click', playOnInteraction);
-                            document.removeEventListener('touchstart', playOnInteraction);
-                        }).catch(e => console.error('Still failed:', e));
-                    };
-                    document.addEventListener('click', playOnInteraction, { once: true });
-                    document.addEventListener('touchstart', playOnInteraction, { once: true });
-                }
-                
-                // Try again after a delay
-                setTimeout(() => {
-                    console.log('🔄 Retrying remote video play...');
-                    remoteVideo.removeAttribute('muted');
-                    remoteVideo.muted = false;
-                    remoteVideo.play().then(() => {
-                        console.log('✅ Remote video play retry successful');
-                    }).catch(e => {
-                        console.error('❌ Retry play failed:', e.message);
-                        
-                        // Check diagnostic info
-                        const videoCallScreen = document.getElementById('video-call-screen');
-                        if (videoCallScreen && videoCallScreen.style.display === 'none') {
-                            console.error('⚠️ Video call screen is hidden - video won\'t play until screen is shown');
-                        }
-                        
-                        if (remoteStream.getTracks().length === 0) {
-                            console.error('⚠️ Remote stream has no tracks! This is a critical issue.');
-                            console.error('   This means the peer connection is not receiving tracks from the remote party.');
-                            console.error('   Check: 1) Are tracks being sent? 2) Is signaling working? 3) Is peer connection established?');
-                        }
-                        
-                        // Log comprehensive video element state
-                        console.log('📺 Video element state:', {
-                            paused: remoteVideo.paused,
-                            muted: remoteVideo.muted,
-                            volume: remoteVideo.volume,
-                            hasSrcObject: !!remoteVideo.srcObject,
-                            readyState: remoteVideo.readyState,
-                            videoWidth: remoteVideo.videoWidth,
-                            videoHeight: remoteVideo.videoHeight,
-                            networkState: remoteVideo.networkState
-                        });
-                        
-                        // Log peer connection state
-                        if (peerConnection) {
-                            console.log('🔌 Peer connection state:', {
-                                connectionState: peerConnection.connectionState,
-                                iceConnectionState: peerConnection.iceConnectionState,
-                                signalingState: peerConnection.signalingState,
-                                localDescription: peerConnection.localDescription ? 'set' : 'not set',
-                                remoteDescription: peerConnection.remoteDescription ? 'set' : 'not set'
-                            });
-                        }
-                    });
-                }, 1000);
+        // CRITICAL: Debounce play attempts to prevent AbortError
+        // Only try to play if not already playing or attempting to play
+        if (!isPlayingRemoteVideo && remoteVideo.paused) {
+            console.log('▶️ Scheduling remote video play (debounced)...');
+            
+            // Clear any existing timeout
+            if (playVideoTimeout) {
+                clearTimeout(playVideoTimeout);
             }
-        };
-        
-        // Play immediately
-        playRemoteVideo();
+            
+            // Wait a bit to ensure stream is ready, then play
+            playVideoTimeout = setTimeout(() => {
+                isPlayingRemoteVideo = true;
+                playRemoteVideo();
+            }, needsUpdate ? 300 : 100); // Longer delay if we just updated srcObject
+        } else {
+            console.log('ℹ️ Video already playing or play attempt in progress, skipping');
+        }
         
         // Also log all tracks in the stream
         const trackKinds = remoteStream.getTracks().map(t => `${t.kind}(${t.enabled ? 'on' : 'off'}, ${t.readyState})`);
         console.log('✅ Remote stream updated. Active tracks:', trackKinds.join(', '));
+    };
+    
+    // Separate function to handle playing (prevents AbortError)
+    const playRemoteVideo = async () => {
+        const remoteVideo = document.getElementById('remote-video');
+        if (!remoteVideo || !remoteStream) {
+            isPlayingRemoteVideo = false;
+            return;
+        }
+        
+        try {
+            // CRITICAL: Ensure video is unmuted before playing
+            remoteVideo.removeAttribute('muted');
+            remoteVideo.muted = false;
+            remoteVideo.volume = 1.0;
+            
+            // Only play if paused
+            if (remoteVideo.paused) {
+                await remoteVideo.play();
+                console.log('✅ Remote video playing successfully');
+            } else {
+                console.log('ℹ️ Video already playing');
+            }
+            
+            // Double-check audio is unmuted after play
+            if (remoteVideo.muted) {
+                console.warn('⚠️ Video muted after play, forcing unmute...');
+                remoteVideo.muted = false;
+            }
+            
+            // Verify tracks after play
+            const audioTracks = remoteStream.getAudioTracks();
+            const videoTracks = remoteStream.getVideoTracks();
+            
+            console.log(`📊 Remote stream state after play:`);
+            console.log(`   - Total tracks: ${remoteStream.getTracks().length}`);
+            console.log(`   - Audio tracks: ${audioTracks.length}`);
+            console.log(`   - Video tracks: ${videoTracks.length}`);
+            
+            if (videoTracks.length > 0) {
+                const vTrack = videoTracks[0];
+                console.log(`   - Video track: enabled=${vTrack.enabled}, readyState=${vTrack.readyState}, muted=${vTrack.muted}`);
+            }
+            if (audioTracks.length > 0) {
+                const aTrack = audioTracks[0];
+                console.log(`   - Audio track: enabled=${aTrack.enabled}, readyState=${aTrack.readyState}, muted=${aTrack.muted}`);
+            }
+            
+            // Verify video element is actually showing video
+            const hasVideoTrack = remoteVideo.srcObject && remoteVideo.srcObject.getVideoTracks().length > 0;
+            const hasAudioTrack = remoteVideo.srcObject && remoteVideo.srcObject.getAudioTracks().length > 0;
+            console.log(`   - Video element has stream: ${!!remoteVideo.srcObject}`);
+            console.log(`   - Video element has video track: ${hasVideoTrack}`);
+            console.log(`   - Video element has audio track: ${hasAudioTrack}`);
+            console.log(`   - Video element muted: ${remoteVideo.muted}`);
+            console.log(`   - Video element volume: ${remoteVideo.volume}`);
+            
+            // Diagnostic: Check if video is actually visible
+            const videoRect = remoteVideo.getBoundingClientRect();
+            console.log(`   - Video element dimensions: ${videoRect.width}x${videoRect.height}`);
+            console.log(`   - Video element visible: ${videoRect.width > 0 && videoRect.height > 0}`);
+            
+            isPlayingRemoteVideo = false;
+            
+        } catch (err) {
+            isPlayingRemoteVideo = false;
+            console.error('❌ Remote video play error:', err);
+            console.error('   Error details:', err.message, err.name);
+            
+            // Check if it's an AbortError (interrupted by another play call)
+            if (err.name === 'AbortError') {
+                console.warn('⚠️ Play was interrupted - this is usually harmless if another play succeeds');
+                // Don't retry immediately for AbortError
+                return;
+            }
+            
+            // Check if it's a user interaction issue
+            if (err.name === 'NotAllowedError') {
+                console.error('⚠️ Autoplay was blocked - video will play once user interacts with page');
+                // Try to play on user interaction
+                const playOnInteraction = () => {
+                    remoteVideo.play().then(() => {
+                        console.log('✅ Video started playing after user interaction');
+                        document.removeEventListener('click', playOnInteraction);
+                        document.removeEventListener('touchstart', playOnInteraction);
+                    }).catch(e => console.error('Still failed:', e));
+                };
+                document.addEventListener('click', playOnInteraction, { once: true });
+                document.addEventListener('touchstart', playOnInteraction, { once: true });
+                return;
+            }
+            
+            // For other errors, retry after a delay
+            setTimeout(() => {
+                if (!isPlayingRemoteVideo && remoteVideo.paused) {
+                    console.log('🔄 Retrying remote video play...');
+                    remoteVideo.removeAttribute('muted');
+                    remoteVideo.muted = false;
+                    playRemoteVideo();
+                }
+            }, 1000);
+        }
     };
     
     // Add diagnostic function to window for debugging
@@ -3251,9 +3275,47 @@ function createPeerConnection() {
         
         if (peerConnection.connectionState === 'connected') {
             console.log('✅ WebRTC connected!');
-        } else if (peerConnection.connectionState === 'disconnected' || 
-                   peerConnection.connectionState === 'failed') {
-            console.log('❌ WebRTC connection lost');
+            
+            // Ensure remote video plays when connection is established
+            setTimeout(() => {
+                const remoteVideo = document.getElementById('remote-video');
+                if (remoteVideo && remoteVideo.paused && remoteStream && remoteStream.getTracks().length > 0) {
+                    console.log('▶️ Connection established, ensuring video plays...');
+                    playRemoteVideo();
+                }
+            }, 500);
+            
+        } else if (peerConnection.connectionState === 'disconnected') {
+            console.warn('⚠️ WebRTC connection disconnected');
+            // Try to reconnect
+            setTimeout(() => {
+                if (peerConnection && peerConnection.connectionState === 'disconnected') {
+                    console.log('🔄 Attempting to reconnect...');
+                    try {
+                        peerConnection.restartIce();
+                    } catch (e) {
+                        console.error('❌ Failed to restart ICE:', e);
+                    }
+                }
+            }, 2000);
+        } else if (peerConnection.connectionState === 'failed') {
+            console.error('❌ WebRTC connection failed!');
+            console.error('   This means the peer connection could not be established.');
+            console.error('   Possible causes:');
+            console.error('   1) Network connectivity issues');
+            console.error('   2) Firewall/NAT blocking WebRTC traffic');
+            console.error('   3) STUN/TURN servers not accessible');
+            console.error('   4) Signaling issues (offer/answer not exchanged properly)');
+            
+            // Try to restart ICE as last resort
+            console.log('🔄 Attempting to restart ICE connection...');
+            try {
+                peerConnection.restartIce();
+                console.log('✅ ICE restart initiated');
+            } catch (e) {
+                console.error('❌ Failed to restart ICE:', e);
+                console.error('   Connection may need to be re-established');
+            }
         }
     };
     
@@ -3283,6 +3345,28 @@ function createPeerConnection() {
             console.error('   2) STUN/TURN servers not accessible');
             console.error('   3) Network connectivity issues');
             console.error('   Consider using TURN servers for better connectivity');
+            
+            // Try to restart ICE connection
+            console.log('🔄 Attempting to restart ICE connection...');
+            try {
+                peerConnection.restartIce();
+                console.log('✅ ICE restart initiated');
+            } catch (e) {
+                console.error('❌ Failed to restart ICE:', e);
+            }
+        } else if (peerConnection.iceConnectionState === 'disconnected') {
+            console.warn('⚠️ ICE connection disconnected - attempting to reconnect...');
+            // Wait a bit and check if it recovers
+            setTimeout(() => {
+                if (peerConnection && peerConnection.iceConnectionState === 'disconnected') {
+                    console.log('🔄 ICE still disconnected, attempting restart...');
+                    try {
+                        peerConnection.restartIce();
+                    } catch (e) {
+                        console.error('❌ Failed to restart ICE:', e);
+                    }
+                }
+            }, 2000);
         }
     };
     

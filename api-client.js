@@ -421,20 +421,48 @@ function initSocket() {
                 
                 if (audioSenders.length === 0 || videoSenders.length === 0) {
                     console.warn('⚠️ WARNING: Missing tracks in peer connection before creating answer!');
+                    console.warn(`   Current senders: ${audioSenders.length} audio, ${videoSenders.length} video`);
+                    
                     if (typeof localStream !== 'undefined' && localStream) {
                         console.log('📤 Re-adding local tracks to peer connection...');
-                        localStream.getTracks().forEach(track => {
+                        const localTracks = localStream.getTracks();
+                        console.log(`   Found ${localTracks.length} local track(s) to add`);
+                        
+                        localTracks.forEach(track => {
                             const hasTrack = senders.some(s => s.track && s.track.id === track.id);
                             if (!hasTrack) {
-                                console.log(`📤 Adding ${track.kind} track to peer connection`);
-                                peerConnection.addTrack(track, localStream);
+                                console.log(`📤 Adding ${track.kind} track (${track.id}) to peer connection`);
+                                try {
+                                    peerConnection.addTrack(track, localStream);
+                                    console.log(`✅ ${track.kind} track added successfully`);
+                                } catch (err) {
+                                    console.error(`❌ Failed to add ${track.kind} track:`, err);
+                                    // Try replacing if there's an existing sender of this kind
+                                    const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+                                    if (existingSender) {
+                                        console.log(`🔄 Replacing existing ${track.kind} sender`);
+                                        existingSender.replaceTrack(track).catch(e => {
+                                            console.error(`❌ Failed to replace ${track.kind} track:`, e);
+                                        });
+                                    }
+                                }
+                            } else {
+                                console.log(`✓ ${track.kind} track already in peer connection`);
                             }
                         });
+                        
+                        // Verify tracks were added
+                        const updatedSenders = peerConnection.getSenders();
+                        const updatedAudio = updatedSenders.filter(s => s.track && s.track.kind === 'audio').length;
+                        const updatedVideo = updatedSenders.filter(s => s.track && s.track.kind === 'video').length;
+                        console.log(`✅ After re-adding: ${updatedAudio} audio sender(s), ${updatedVideo} video sender(s)`);
+                    } else {
+                        console.warn('⚠️ localStream is not available - cannot add tracks');
                     }
                 }
                 
-                // Wait a moment for tracks to be added
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Wait longer for tracks to be properly added and negotiated
+                await new Promise(resolve => setTimeout(resolve, 500));
                 
                 // Create answer with both audio and video
                 console.log('📞 Creating WebRTC answer...');
