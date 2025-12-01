@@ -2082,6 +2082,9 @@ let currentConsultation = null;
 async function startVideoCall(consultation) {
     console.log('🎬 Starting video call for consultation:', consultation.id);
     
+    // Load video call settings
+    loadVideoCallSettings();
+    
     // Stop polling when call starts
     stopConsultationStatusPolling();
     stopDoctorRequestPolling();
@@ -2539,49 +2542,62 @@ async function initializeVideoStreams() {
     initializeVideoStreams.inProgress = true;
     
     try {
-        // Strategy: Try to get media with fallback options
-        // First, try both video and audio
+        // Load video call settings
+        loadVideoCallSettings();
+        
+        // Strategy: Try to get media with fallback options using video call settings
+        // First, try both video and audio with user settings
         let constraints = {
-            video: { 
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: 'user'
-            },
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true
-            }
+            video: getVideoConstraints(),
+            audio: getAudioConstraints()
         };
         
-        console.log('🎥 Requesting camera/microphone access...');
+        console.log('🎥 Requesting camera/microphone access with settings...', constraints);
         let stream = null;
         
         try {
-            // Try to get both video and audio
+            // Try to get both video and audio with settings
             stream = await navigator.mediaDevices.getUserMedia(constraints);
             console.log('✅ Camera and microphone access granted');
-        } catch (error) {
-            console.warn('⚠️ Could not get both video and audio, trying individual devices...', error.name);
             
-            // Fallback 1: Try audio only
+            // Apply video mirror if enabled
+            applyVideoMirror();
+            
+            // Set audio volume
+            updateAudioVolume(videoCallSettings.audio.volume);
+        } catch (error) {
+            console.warn('⚠️ Could not get both video and audio with settings, trying with defaults...', error.name);
+            
+            // Fallback 1: Try audio only with settings
             try {
-                console.log('🎤 Trying audio only...');
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('🎤 Trying audio only with settings...');
+                stream = await navigator.mediaDevices.getUserMedia({ audio: getAudioConstraints() });
                 console.log('✅ Audio access granted (no camera)');
+                updateAudioVolume(videoCallSettings.audio.volume);
             } catch (audioError) {
-                console.warn('⚠️ Could not get audio either, trying video only...', audioError.name);
+                console.warn('⚠️ Could not get audio with settings, trying default...', audioError.name);
                 
-                // Fallback 2: Try video only
+                // Fallback 2: Try video only with settings
                 try {
-                    console.log('📹 Trying video only...');
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    console.log('📹 Trying video only with settings...');
+                    stream = await navigator.mediaDevices.getUserMedia({ video: getVideoConstraints() });
                     console.log('✅ Video access granted (no microphone)');
+                    applyVideoMirror();
                 } catch (videoError) {
-                    console.warn('⚠️ Could not get video either, proceeding without local media...', videoError.name);
+                    console.warn('⚠️ Could not get video with settings, trying defaults...', videoError.name);
                     
-                    // Fallback 3: Create empty stream and proceed - user can still receive remote video/audio
-                    stream = new MediaStream();
-                    console.log('ℹ️ Proceeding without local camera/microphone - will still receive remote streams');
+                    // Fallback 3: Try with basic constraints
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: true, 
+                            audio: true 
+                        });
+                        console.log('✅ Basic media access granted');
+                    } catch (basicError) {
+                        console.warn('⚠️ Could not get media, proceeding without local media...', basicError.name);
+                        stream = new MediaStream();
+                        console.log('ℹ️ Proceeding without local camera/microphone - will still receive remote streams');
+                    }
                 }
             }
         }
@@ -3334,13 +3350,12 @@ async function switchCamera() {
         const oldVideoTrack = videoTracks[0];
         oldVideoTrack.stop();
         
-        // Get new stream with switched camera
+        // Get new stream with switched camera using video call settings
+        const videoConstraints = getVideoConstraints();
+        videoConstraints.deviceId = { exact: nextCamera.deviceId };
+        
         const newStream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                deviceId: { exact: nextCamera.deviceId }
-            },
+            video: videoConstraints,
             audio: false // Keep audio from existing stream
         });
         
@@ -3447,7 +3462,549 @@ function cleanupWebRTC() {
     if (remotePlaceholder) remotePlaceholder.style.display = 'flex';
 }
 
+// Video Call Settings
+let videoCallSettings = {
+    video: {
+        resolution: 'medium',
+        framerate: 30,
+        camera: 'default',
+        mirror: false,
+        autofocus: true
+    },
+    audio: {
+        input: 'default',
+        output: 'default',
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGain: true,
+        volume: 50
+    },
+    network: {
+        bandwidth: 'medium',
+        quality: 'balanced',
+        adaptive: true
+    },
+    advanced: {
+        codec: 'h264',
+        dtx: false,
+        agc: true,
+        aec: true,
+        ns: true
+    }
+};
+
+// Load saved video call settings
+function loadVideoCallSettings() {
+    const saved = localStorage.getItem('videoCallSettings');
+    if (saved) {
+        try {
+            videoCallSettings = { ...videoCallSettings, ...JSON.parse(saved) };
+        } catch (e) {
+            console.error('Error loading video call settings:', e);
+        }
+    }
+}
+
+// Save video call settings
+function saveVideoCallSettings() {
+    localStorage.setItem('videoCallSettings', JSON.stringify(videoCallSettings));
+}
+
+// Open video call settings modal
+function openVideoCallSettings() {
+    const modal = document.getElementById('video-call-settings-modal');
+    if (!modal) return;
+    
+    loadVideoCallSettings();
+    loadDeviceOptions();
+    updateSettingsUI();
+    updateNetworkStats();
+    
+    modal.style.display = 'block';
+}
+
+// Close video call settings modal
+function closeVideoCallSettings() {
+    const modal = document.getElementById('video-call-settings-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// Switch video settings tabs
+function openVideoSettingsTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('#video-call-settings-modal .settings-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tabs
+    document.querySelectorAll('#video-call-settings-modal .settings-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    const selectedContent = document.getElementById(`${tabName}-settings-tab`);
+    if (selectedContent) {
+        selectedContent.classList.add('active');
+    }
+    
+    // Activate selected tab button
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
+}
+
+// Load available devices
+async function loadDeviceOptions() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        
+        // Video devices
+        const videoSelect = document.getElementById('video-camera');
+        if (videoSelect) {
+            videoSelect.innerHTML = '<option value="default">Default Camera</option>';
+            devices.filter(d => d.kind === 'videoinput').forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Camera ${videoSelect.options.length}`;
+                if (device.deviceId === videoCallSettings.video.camera) {
+                    option.selected = true;
+                }
+                videoSelect.appendChild(option);
+            });
+        }
+        
+        // Audio input devices
+        const audioInputSelect = document.getElementById('audio-input');
+        if (audioInputSelect) {
+            audioInputSelect.innerHTML = '<option value="default">Default Microphone</option>';
+            devices.filter(d => d.kind === 'audioinput').forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Microphone ${audioInputSelect.options.length}`;
+                if (device.deviceId === videoCallSettings.audio.input) {
+                    option.selected = true;
+                }
+                audioInputSelect.appendChild(option);
+            });
+        }
+        
+        // Audio output devices
+        const audioOutputSelect = document.getElementById('audio-output');
+        if (audioOutputSelect) {
+            audioOutputSelect.innerHTML = '<option value="default">Default Speaker</option>';
+            devices.filter(d => d.kind === 'audiooutput').forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Speaker ${audioOutputSelect.options.length}`;
+                if (device.deviceId === videoCallSettings.audio.output) {
+                    option.selected = true;
+                }
+                audioOutputSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading devices:', error);
+    }
+}
+
+// Update settings UI with current values
+function updateSettingsUI() {
+    // Video settings
+    const videoResolution = document.getElementById('video-resolution');
+    if (videoResolution) videoResolution.value = videoCallSettings.video.resolution;
+    
+    const videoFramerate = document.getElementById('video-framerate');
+    if (videoFramerate) videoFramerate.value = videoCallSettings.video.framerate;
+    
+    const videoMirror = document.getElementById('video-mirror');
+    if (videoMirror) videoMirror.checked = videoCallSettings.video.mirror;
+    
+    const videoAutofocus = document.getElementById('video-autofocus');
+    if (videoAutofocus) videoAutofocus.checked = videoCallSettings.video.autofocus;
+    
+    // Audio settings
+    const audioEchoCancellation = document.getElementById('audio-echo-cancellation');
+    if (audioEchoCancellation) audioEchoCancellation.checked = videoCallSettings.audio.echoCancellation;
+    
+    const audioNoiseSuppression = document.getElementById('audio-noise-suppression');
+    if (audioNoiseSuppression) audioNoiseSuppression.checked = videoCallSettings.audio.noiseSuppression;
+    
+    const audioAutoGain = document.getElementById('audio-auto-gain');
+    if (audioAutoGain) audioAutoGain.checked = videoCallSettings.audio.autoGain;
+    
+    const audioVolume = document.getElementById('audio-volume');
+    if (audioVolume) {
+        audioVolume.value = videoCallSettings.audio.volume;
+        updateAudioVolume(videoCallSettings.audio.volume);
+    }
+    
+    // Network settings
+    const networkBandwidth = document.getElementById('network-bandwidth');
+    if (networkBandwidth) networkBandwidth.value = videoCallSettings.network.bandwidth;
+    
+    const networkQuality = document.getElementById('network-quality');
+    if (networkQuality) networkQuality.value = videoCallSettings.network.quality;
+    
+    const networkAdaptive = document.getElementById('network-adaptive');
+    if (networkAdaptive) networkAdaptive.checked = videoCallSettings.network.adaptive;
+    
+    // Advanced settings
+    const advancedCodec = document.getElementById('advanced-codec');
+    if (advancedCodec) advancedCodec.value = videoCallSettings.advanced.codec;
+    
+    const advancedDtx = document.getElementById('advanced-dtx');
+    if (advancedDtx) advancedDtx.checked = videoCallSettings.advanced.dtx;
+    
+    const advancedAgc = document.getElementById('advanced-agc');
+    if (advancedAgc) advancedAgc.checked = videoCallSettings.advanced.agc;
+    
+    const advancedAec = document.getElementById('advanced-aec');
+    if (advancedAec) advancedAec.checked = videoCallSettings.advanced.aec;
+    
+    const advancedNs = document.getElementById('advanced-ns');
+    if (advancedNs) advancedNs.checked = videoCallSettings.advanced.ns;
+}
+
+// Update audio volume display
+function updateAudioVolume(value) {
+    const volumeValue = document.getElementById('audio-volume-value');
+    if (volumeValue) volumeValue.textContent = value;
+    
+    // Update remote video volume
+    const remoteVideo = document.getElementById('remote-video');
+    if (remoteVideo) {
+        remoteVideo.volume = value / 100;
+    }
+}
+
+// Update video settings (called on change)
+function updateVideoSettings() {
+    // Video settings
+    const videoResolution = document.getElementById('video-resolution');
+    if (videoResolution) videoCallSettings.video.resolution = videoResolution.value;
+    
+    const videoFramerate = document.getElementById('video-framerate');
+    if (videoFramerate) videoCallSettings.video.framerate = parseInt(videoFramerate.value);
+    
+    const videoCamera = document.getElementById('video-camera');
+    if (videoCamera) videoCallSettings.video.camera = videoCamera.value;
+    
+    const videoMirror = document.getElementById('video-mirror');
+    if (videoMirror) {
+        videoCallSettings.video.mirror = videoMirror.checked;
+        applyVideoMirror();
+    }
+    
+    const videoAutofocus = document.getElementById('video-autofocus');
+    if (videoAutofocus) videoCallSettings.video.autofocus = videoAutofocus.checked;
+    
+    // Audio settings
+    const audioInput = document.getElementById('audio-input');
+    if (audioInput) videoCallSettings.audio.input = audioInput.value;
+    
+    const audioOutput = document.getElementById('audio-output');
+    if (audioOutput) videoCallSettings.audio.output = audioOutput.value;
+    
+    const audioEchoCancellation = document.getElementById('audio-echo-cancellation');
+    if (audioEchoCancellation) videoCallSettings.audio.echoCancellation = audioEchoCancellation.checked;
+    
+    const audioNoiseSuppression = document.getElementById('audio-noise-suppression');
+    if (audioNoiseSuppression) videoCallSettings.audio.noiseSuppression = audioNoiseSuppression.checked;
+    
+    const audioAutoGain = document.getElementById('audio-auto-gain');
+    if (audioAutoGain) videoCallSettings.audio.autoGain = audioAutoGain.checked;
+    
+    // Network settings
+    const networkBandwidth = document.getElementById('network-bandwidth');
+    if (networkBandwidth) videoCallSettings.network.bandwidth = networkBandwidth.value;
+    
+    const networkQuality = document.getElementById('network-quality');
+    if (networkQuality) videoCallSettings.network.quality = networkQuality.value;
+    
+    const networkAdaptive = document.getElementById('network-adaptive');
+    if (networkAdaptive) videoCallSettings.network.adaptive = networkAdaptive.checked;
+    
+    // Advanced settings
+    const advancedCodec = document.getElementById('advanced-codec');
+    if (advancedCodec) videoCallSettings.advanced.codec = advancedCodec.value;
+    
+    const advancedDtx = document.getElementById('advanced-dtx');
+    if (advancedDtx) videoCallSettings.advanced.dtx = advancedDtx.checked;
+    
+    const advancedAgc = document.getElementById('advanced-agc');
+    if (advancedAgc) videoCallSettings.advanced.agc = advancedAgc.checked;
+    
+    const advancedAec = document.getElementById('advanced-aec');
+    if (advancedAec) videoCallSettings.advanced.aec = advancedAec.checked;
+    
+    const advancedNs = document.getElementById('advanced-ns');
+    if (advancedNs) videoCallSettings.advanced.ns = advancedNs.checked;
+}
+
+// Apply video mirror effect
+function applyVideoMirror() {
+    const localVideo = document.getElementById('local-video');
+    if (localVideo) {
+        if (videoCallSettings.video.mirror) {
+            localVideo.style.transform = 'scaleX(-1)';
+        } else {
+            localVideo.style.transform = 'scaleX(1)';
+        }
+    }
+}
+
+// Get video constraints based on settings
+function getVideoConstraints() {
+    const resolutionMap = {
+        low: { width: { ideal: 320 }, height: { ideal: 240 } },
+        medium: { width: { ideal: 640 }, height: { ideal: 480 } },
+        high: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        ultra: { width: { ideal: 1920 }, height: { ideal: 1080 } }
+    };
+    
+    const constraints = {
+        ...resolutionMap[videoCallSettings.video.resolution] || resolutionMap.medium,
+        frameRate: { ideal: videoCallSettings.video.framerate },
+        facingMode: 'user'
+    };
+    
+    if (videoCallSettings.video.camera !== 'default') {
+        constraints.deviceId = { exact: videoCallSettings.video.camera };
+    }
+    
+    if (videoCallSettings.video.autofocus !== undefined) {
+        constraints.focusMode = videoCallSettings.video.autofocus ? 'continuous' : 'manual';
+    }
+    
+    return constraints;
+}
+
+// Get audio constraints based on settings
+function getAudioConstraints() {
+    const constraints = {
+        echoCancellation: videoCallSettings.audio.echoCancellation,
+        noiseSuppression: videoCallSettings.audio.noiseSuppression,
+        autoGainControl: videoCallSettings.audio.autoGain
+    };
+    
+    if (videoCallSettings.audio.input !== 'default') {
+        constraints.deviceId = { exact: videoCallSettings.audio.input };
+    }
+    
+    return constraints;
+}
+
+// Apply video call settings
+async function applyVideoCallSettings() {
+    updateVideoSettings();
+    saveVideoCallSettings();
+    
+    // Apply settings to current stream if active
+    if (localStream) {
+        try {
+            // Update video track
+            const videoTracks = localStream.getVideoTracks();
+            if (videoTracks.length > 0) {
+                const videoTrack = videoTracks[0];
+                const settings = getVideoConstraints();
+                await videoTrack.applyConstraints(settings);
+            }
+            
+            // Update audio track
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const audioTrack = audioTracks[0];
+                const settings = getAudioConstraints();
+                await audioTrack.applyConstraints(settings);
+            }
+            
+            applyVideoMirror();
+            updateAudioVolume(videoCallSettings.audio.volume);
+            
+            alert('✅ Video call settings applied successfully!');
+        } catch (error) {
+            console.error('Error applying settings:', error);
+            alert('⚠️ Some settings could not be applied. They will be used for the next call.');
+        }
+    } else {
+        alert('✅ Settings saved! They will be applied when you start a video call.');
+    }
+    
+    closeVideoCallSettings();
+}
+
+// Test video settings
+function testVideoSettings() {
+    alert('🧪 Testing video settings...\n\nThis feature will preview your camera with the current settings.');
+    // Could implement a preview window here
+}
+
+// Reset video settings to defaults
+function resetVideoSettings() {
+    if (confirm('Reset all video call settings to defaults?')) {
+        videoCallSettings = {
+            video: {
+                resolution: 'medium',
+                framerate: 30,
+                camera: 'default',
+                mirror: false,
+                autofocus: true
+            },
+            audio: {
+                input: 'default',
+                output: 'default',
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGain: true,
+                volume: 50
+            },
+            network: {
+                bandwidth: 'medium',
+                quality: 'balanced',
+                adaptive: true
+            },
+            advanced: {
+                codec: 'h264',
+                dtx: false,
+                agc: true,
+                aec: true,
+                ns: true
+            }
+        };
+        updateSettingsUI();
+        saveVideoCallSettings();
+        alert('✅ Settings reset to defaults!');
+    }
+}
+
+// Update network statistics
+function updateNetworkStats() {
+    if (!peerConnection) {
+        document.getElementById('network-connection-status').textContent = 'Not connected';
+        return;
+    }
+    
+    const connectionState = peerConnection.connectionState || 'unknown';
+    document.getElementById('network-connection-status').textContent = connectionState.charAt(0).toUpperCase() + connectionState.slice(1);
+    
+    // Get stats periodically
+    if (peerConnection.getStats) {
+        peerConnection.getStats().then(stats => {
+            let latency = '-';
+            let packetLoss = '-';
+            let bitrate = '-';
+            
+            stats.forEach(report => {
+                if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                    if (report.currentRoundTripTime) {
+                        latency = Math.round(report.currentRoundTripTime * 1000);
+                    }
+                }
+                if (report.type === 'inbound-rtp' || report.type === 'outbound-rtp') {
+                    if (report.bytesReceived || report.bytesSent) {
+                        const bytes = report.bytesReceived || report.bytesSent;
+                        bitrate = Math.round(bytes / 1024);
+                    }
+                }
+            });
+            
+            document.getElementById('network-latency').textContent = latency;
+            document.getElementById('network-packet-loss').textContent = packetLoss;
+            document.getElementById('network-bitrate').textContent = bitrate;
+        }).catch(err => {
+            console.error('Error getting stats:', err);
+        });
+    }
+}
+
+// Toggle screen share
+let screenShareStream = null;
+async function toggleScreenShare() {
+    try {
+        if (!screenShareStream) {
+            // Start screen sharing
+            screenShareStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { cursor: 'always' },
+                audio: true
+            });
+            
+            // Replace video track in peer connection
+            if (peerConnection) {
+                const sender = peerConnection.getSenders().find(s => 
+                    s.track && s.track.kind === 'video'
+                );
+                if (sender) {
+                    await sender.replaceTrack(screenShareStream.getVideoTracks()[0]);
+                }
+            }
+            
+            // Update local video
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.srcObject = screenShareStream;
+            }
+            
+            // Update button
+            const screenBtn = document.getElementById('toggle-screen-btn');
+            if (screenBtn) {
+                screenBtn.classList.add('active');
+                screenBtn.title = 'Stop Screen Share';
+            }
+            
+            // Handle screen share end
+            screenShareStream.getVideoTracks()[0].onended = () => {
+                stopScreenShare();
+            };
+            
+            console.log('✅ Screen sharing started');
+        } else {
+            stopScreenShare();
+        }
+    } catch (error) {
+        console.error('Error toggling screen share:', error);
+        alert('Unable to start screen sharing. Please check your browser permissions.');
+    }
+}
+
+// Stop screen sharing
+async function stopScreenShare() {
+    if (screenShareStream) {
+        screenShareStream.getTracks().forEach(track => track.stop());
+        screenShareStream = null;
+        
+        // Restore camera video
+        if (localStream) {
+            const videoTracks = localStream.getVideoTracks();
+            if (videoTracks.length > 0 && peerConnection) {
+                const sender = peerConnection.getSenders().find(s => 
+                    s.track && s.track.kind === 'video'
+                );
+                if (sender) {
+                    await sender.replaceTrack(videoTracks[0]);
+                }
+            }
+            
+            const localVideo = document.getElementById('local-video');
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+            }
+        }
+        
+        // Update button
+        const screenBtn = document.getElementById('toggle-screen-btn');
+        if (screenBtn) {
+            screenBtn.classList.remove('active');
+            screenBtn.title = 'Share Screen';
+        }
+        
+        console.log('✅ Screen sharing stopped');
+    }
+}
+
 async function endVideoCall() {
+    // Stop screen sharing if active
+    await stopScreenShare();
+    
     // Cleanup WebRTC connections
     cleanupWebRTC();
     
@@ -3845,6 +4402,11 @@ window.onclick = function(event) {
     const settingsModal = document.getElementById('settings-modal');
     if (event.target === settingsModal) {
         closeSettings();
+    }
+    
+    const videoCallSettingsModal = document.getElementById('video-call-settings-modal');
+    if (event.target === videoCallSettingsModal) {
+        closeVideoCallSettings();
     }
 }
 

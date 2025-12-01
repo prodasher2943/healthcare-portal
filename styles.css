@@ -2264,6 +2264,29 @@ body {
     gap: 1.5rem;
 }
 
+.call-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-settings-call {
+    padding: 0.75rem 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+}
+
+.btn-settings-call:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
 .call-timer {
     font-size: 1.1rem;
     font-weight: 600;
@@ -2297,7 +2320,17 @@ body {
     flex: 1;
     display: flex;
     padding: 1rem;
+    gap: 1rem;
     overflow: hidden;
+}
+
+.video-call-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+    position: relative;
 }
 
 .video-call-main {
@@ -2330,25 +2363,21 @@ body {
     border-radius: 12px;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .remote-video {
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: 100%;
-    position: relative;
-    min-height: 500px;
+    aspect-ratio: 16/9;
 }
 
 .local-video {
-    width: 280px;
-    height: 210px;
-    position: absolute;
-    bottom: 5.5rem;
-    right: 1rem;
-    z-index: 10;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    pointer-events: none; /* Prevent blocking clicks on controls */
+    width: 100%;
+    aspect-ratio: 16/9;
+    max-height: 300px;
+    pointer-events: auto;
 }
 
 .video-box video {
@@ -2418,12 +2447,13 @@ body {
 
 /* Video Call Controls */
 .video-call-controls {
-    position: absolute;
-    bottom: 1.5rem;
-    right: 1.5rem;
     display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
     z-index: 25;
 }
 
@@ -2520,13 +2550,16 @@ body {
 
 /* Video Call Sidebar */
 .video-call-sidebar {
-    width: 350px;
+    width: 380px;
     display: flex;
     flex-direction: column;
     gap: 1rem;
     overflow-y: auto;
     overflow-x: hidden;
     max-height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 1rem;
 }
 
 .call-info-panel {
@@ -2810,19 +2843,26 @@ body {
 /* Responsive video call interface */
 @media (max-width: 1024px) {
     .video-call-sidebar {
-        width: 300px;
+        width: 320px;
+    }
+    
+    .video-call-left {
+        gap: 0.75rem;
     }
     
     .local-video {
-        width: 240px;
-        height: 180px;
-        bottom: 5rem;
+        max-height: 250px;
     }
 }
 
 @media (max-width: 768px) {
-    .video-call-main {
+    .video-call-content {
         flex-direction: column;
+    }
+    
+    .video-call-left {
+        order: 1;
+        min-height: 60vh;
     }
     
     .video-call-sidebar {
@@ -2831,20 +2871,23 @@ body {
         order: 2;
     }
     
-    .video-container-wrapper {
-        order: 1;
-        min-height: 60vh;
-    }
-    
     .remote-video {
         min-height: 400px;
     }
     
     .local-video {
-        width: 180px;
-        height: 135px;
-        bottom: 4.5rem;
-        right: 0.5rem;
+        max-height: 200px;
+    }
+    
+    .video-call-controls {
+        padding: 0.75rem;
+        gap: 0.75rem;
+    }
+    
+    .control-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 1.1rem;
     }
     
     .prescription-textarea {
@@ -2863,18 +2906,6 @@ body {
         font-size: 0.8rem;
     }
     
-    .video-call-controls {
-        bottom: 1rem;
-        right: 1rem;
-        gap: 0.5rem;
-    }
-    
-    .control-btn {
-        width: 48px;
-        height: 48px;
-        font-size: 1.1rem;
-    }
-    
     .call-timer {
         font-size: 0.9rem;
     }
@@ -2882,18 +2913,37 @@ body {
     .call-participant-name {
         font-size: 0.85rem;
     }
+    
+    .btn-settings-call {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
 }
 
 @media (max-width: 480px) {
+    .video-call-content {
+        padding: 0.5rem;
+        gap: 0.5rem;
+    }
+    
     .remote-video {
         min-height: 300px;
     }
     
     .local-video {
-        width: 120px;
-        height: 90px;
-        bottom: 4rem;
-        right: 0.5rem;
+        max-height: 150px;
+    }
+    
+    .video-call-controls {
+        padding: 0.5rem;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .control-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1rem;
     }
     
     .prescription-textarea {

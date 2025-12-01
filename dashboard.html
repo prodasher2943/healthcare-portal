@@ -782,84 +782,265 @@
                 <div class="call-timer" id="call-timer">00:00</div>
                 <div class="call-participant-name" id="call-participant-name">Consultation</div>
             </div>
-            <button class="btn-end-call" onclick="endVideoCall()">📞 End Call</button>
+            <div class="call-header-right">
+                <button class="btn-settings-call" onclick="openVideoCallSettings()" title="Video Call Settings">⚙️ Settings</button>
+                <button class="btn-end-call" onclick="endVideoCall()">📞 End Call</button>
+            </div>
         </div>
         <div class="video-call-content">
-            <div class="video-call-main">
-                <!-- Video Container -->
-                <div class="video-container-wrapper">
-                    <div class="video-box-container">
-                        <!-- Remote Video (Other Party) -->
-                        <div class="video-box remote-video" id="remote-video-box">
-                            <video id="remote-video" autoplay playsinline muted="false" volume="1.0"></video>
-                            <div class="video-placeholder-content" id="remote-video-placeholder">
-                                <div class="video-avatar">👤</div>
-                                <p id="remote-video-label">Waiting for participant...</p>
-                            </div>
-                            <div class="video-controls-overlay">
-                                <div class="video-label" id="remote-video-name-label"></div>
-                                <div class="video-status-indicator" id="remote-status">●</div>
-                            </div>
-                        </div>
-                        
-                        <!-- Local Video (Self) -->
-                        <div class="video-box local-video" id="local-video-box">
-                            <video id="local-video" autoplay playsinline muted></video>
-                            <div class="video-placeholder-content" id="local-video-placeholder">
-                                <div class="video-avatar">You</div>
-                                <p>Your video</p>
-                            </div>
-                            <div class="video-controls-overlay">
-                                <div class="video-label">You</div>
-                            </div>
-                        </div>
+            <!-- Left Side: Videos Stacked -->
+            <div class="video-call-left">
+                <!-- Top Left: Remote Video (Other Party) -->
+                <div class="video-box remote-video" id="remote-video-box">
+                    <video id="remote-video" autoplay playsinline muted="false" volume="1.0"></video>
+                    <div class="video-placeholder-content" id="remote-video-placeholder">
+                        <div class="video-avatar">👤</div>
+                        <p id="remote-video-label">Waiting for participant...</p>
                     </div>
-                    
-                    <!-- Video Call Controls -->
-                    <div class="video-call-controls">
-                        <button class="control-btn" id="toggle-mic-btn" onclick="toggleMicrophone()" title="Mute/Unmute Microphone">
-                            <span class="control-icon">🎤</span>
-                        </button>
-                        <button class="control-btn" id="toggle-camera-btn" onclick="toggleCamera()" title="Turn Camera On/Off">
-                            <span class="control-icon">📹</span>
-                        </button>
-                        <button class="control-btn" id="switch-camera-btn" onclick="switchCamera()" title="Switch Camera">
-                            <span class="control-icon">🔄</span>
-                        </button>
+                    <div class="video-controls-overlay">
+                        <div class="video-label" id="remote-video-name-label"></div>
+                        <div class="video-status-indicator" id="remote-status">●</div>
                     </div>
                 </div>
                 
-                <!-- Right Panel: Patient Info & Prescription -->
-                <div class="video-call-sidebar">
-                    <!-- Patient/Doctor Info -->
-                    <div class="call-info-panel" id="call-info-panel">
-                        <h3 id="call-info-title">Participant Information</h3>
-                        <div id="call-participant-details"></div>
+                <!-- Bottom Left: Local Video (Self) -->
+                <div class="video-box local-video" id="local-video-box">
+                    <video id="local-video" autoplay playsinline muted></video>
+                    <div class="video-placeholder-content" id="local-video-placeholder">
+                        <div class="video-avatar">You</div>
+                        <p>Your video</p>
                     </div>
-                    
-                    <!-- Prescription Panel (Only visible to doctor, but synced to patient) -->
-                    <div class="prescription-panel" id="prescription-panel">
-                        <div class="prescription-header">
-                            <h3>📋 Prescription</h3>
-                            <div class="prescription-header-actions" id="prescription-header-actions" style="display: none;">
-                                <button class="btn-clear-prescription" onclick="clearPrescription()" title="Clear prescription">🗑️ Clear</button>
-                                <button class="btn-save-prescription" id="btn-save-prescription" onclick="savePrescription()" title="Save prescription">💾 Save</button>
-                            </div>
+                    <div class="video-controls-overlay">
+                        <div class="video-label">You</div>
+                    </div>
+                </div>
+                
+                <!-- Video Call Controls -->
+                <div class="video-call-controls">
+                    <button class="control-btn" id="toggle-mic-btn" onclick="toggleMicrophone()" title="Mute/Unmute Microphone">
+                        <span class="control-icon">🎤</span>
+                    </button>
+                    <button class="control-btn" id="toggle-camera-btn" onclick="toggleCamera()" title="Turn Camera On/Off">
+                        <span class="control-icon">📹</span>
+                    </button>
+                    <button class="control-btn" id="switch-camera-btn" onclick="switchCamera()" title="Switch Camera">
+                        <span class="control-icon">🔄</span>
+                    </button>
+                    <button class="control-btn" id="toggle-screen-btn" onclick="toggleScreenShare()" title="Share Screen">
+                        <span class="control-icon">🖥️</span>
+                    </button>
+                    <button class="control-btn control-btn-end" onclick="endVideoCall()" title="End Call">
+                        <span class="control-icon">📞</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Right Side: Sidebar with Info & Prescription -->
+            <div class="video-call-sidebar">
+                <!-- Patient/Doctor Info -->
+                <div class="call-info-panel" id="call-info-panel">
+                    <h3 id="call-info-title">Participant Information</h3>
+                    <div id="call-participant-details"></div>
+                </div>
+                
+                <!-- Prescription Panel (Only visible to doctor, but synced to patient) -->
+                <div class="prescription-panel" id="prescription-panel">
+                    <div class="prescription-header">
+                        <h3>📋 Prescription</h3>
+                        <div class="prescription-header-actions" id="prescription-header-actions" style="display: none;">
+                            <button class="btn-clear-prescription" onclick="clearPrescription()" title="Clear prescription">🗑️ Clear</button>
+                            <button class="btn-save-prescription" id="btn-save-prescription" onclick="savePrescription()" title="Save prescription">💾 Save</button>
                         </div>
-                        <div class="prescription-content">
-                            <textarea 
-                                id="prescription-textarea" 
-                                class="prescription-textarea" 
-                                placeholder="Doctor: Write prescription here... (Updates in real-time for both parties)"
-                                oninput="onPrescriptionChange()"
-                                readonly
-                            ></textarea>
-                            <div id="prescription-readonly-notice" class="prescription-notice">
-                                <p>📝 Prescription will appear here when the doctor writes it.</p>
-                            </div>
+                    </div>
+                    <div class="prescription-content">
+                        <textarea 
+                            id="prescription-textarea" 
+                            class="prescription-textarea" 
+                            placeholder="Doctor: Write prescription here... (Updates in real-time for both parties)"
+                            oninput="onPrescriptionChange()"
+                            readonly
+                        ></textarea>
+                        <div id="prescription-readonly-notice" class="prescription-notice">
+                            <p>📝 Prescription will appear here when the doctor writes it.</p>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Call Settings Modal -->
+    <div id="video-call-settings-modal" class="modal">
+        <div class="modal-content settings-modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeVideoCallSettings()">&times;</span>
+            <h2>⚙️ Video Call Settings</h2>
+            
+            <div class="settings-tabs">
+                <button class="settings-tab active" onclick="openVideoSettingsTab('video')">📹 Video</button>
+                <button class="settings-tab" onclick="openVideoSettingsTab('audio')">🎤 Audio</button>
+                <button class="settings-tab" onclick="openVideoSettingsTab('network')">🌐 Network</button>
+                <button class="settings-tab" onclick="openVideoSettingsTab('advanced')">🔧 Advanced</button>
+            </div>
+            
+            <!-- Video Settings Tab -->
+            <div id="video-settings-tab" class="settings-tab-content active">
+                <h3>Video Settings</h3>
+                <div class="form-group">
+                    <label for="video-resolution">📐 Video Resolution</label>
+                    <select id="video-resolution" onchange="updateVideoSettings()">
+                        <option value="low">Low (320x240)</option>
+                        <option value="medium" selected>Medium (640x480)</option>
+                        <option value="high">High (1280x720)</option>
+                        <option value="ultra">Ultra HD (1920x1080)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="video-framerate">🎬 Frame Rate (FPS)</label>
+                    <select id="video-framerate" onchange="updateVideoSettings()">
+                        <option value="15">15 FPS</option>
+                        <option value="24">24 FPS</option>
+                        <option value="30" selected>30 FPS</option>
+                        <option value="60">60 FPS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="video-camera">📷 Camera Device</label>
+                    <select id="video-camera" onchange="updateVideoSettings()">
+                        <option value="default">Default Camera</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="video-mirror" onchange="updateVideoSettings()">
+                        <span>🪞 Mirror Video (Flip horizontally)</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="video-autofocus" checked onchange="updateVideoSettings()">
+                        <span>🔍 Auto Focus</span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- Audio Settings Tab -->
+            <div id="audio-settings-tab" class="settings-tab-content">
+                <h3>Audio Settings</h3>
+                <div class="form-group">
+                    <label for="audio-input">🎤 Microphone</label>
+                    <select id="audio-input" onchange="updateVideoSettings()">
+                        <option value="default">Default Microphone</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="audio-output">🔊 Speaker</label>
+                    <select id="audio-output" onchange="updateVideoSettings()">
+                        <option value="default">Default Speaker</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="audio-echo-cancellation">
+                        🔊 Echo Cancellation
+                        <input type="checkbox" id="audio-echo-cancellation" checked onchange="updateVideoSettings()">
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="audio-noise-suppression">
+                        🔇 Noise Suppression
+                        <input type="checkbox" id="audio-noise-suppression" checked onchange="updateVideoSettings()">
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="audio-auto-gain">
+                        📊 Auto Gain Control
+                        <input type="checkbox" id="audio-auto-gain" checked onchange="updateVideoSettings()">
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="audio-volume">🔊 Volume: <span id="audio-volume-value">50</span>%</label>
+                    <input type="range" id="audio-volume" min="0" max="100" value="50" oninput="updateAudioVolume(this.value)" onchange="updateVideoSettings()">
+                </div>
+            </div>
+            
+            <!-- Network Settings Tab -->
+            <div id="network-settings-tab" class="settings-tab-content">
+                <h3>Network Settings</h3>
+                <div class="form-group">
+                    <label for="network-bandwidth">📡 Bandwidth Limit</label>
+                    <select id="network-bandwidth" onchange="updateVideoSettings()">
+                        <option value="unlimited">Unlimited</option>
+                        <option value="high">High (2 Mbps)</option>
+                        <option value="medium" selected>Medium (1 Mbps)</option>
+                        <option value="low">Low (500 Kbps)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="network-quality">📊 Quality Preference</label>
+                    <select id="network-quality" onchange="updateVideoSettings()">
+                        <option value="balanced" selected>Balanced</option>
+                        <option value="quality">Prioritize Quality</option>
+                        <option value="speed">Prioritize Speed</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="network-adaptive" checked onchange="updateVideoSettings()">
+                        <span>🔄 Adaptive Bitrate (Auto-adjust quality)</span>
+                    </label>
+                </div>
+                <div id="network-stats" style="margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.1); border-radius: 8px;">
+                    <h4>Network Statistics</h4>
+                    <p><strong>Connection:</strong> <span id="network-connection-status">Checking...</span></p>
+                    <p><strong>Latency:</strong> <span id="network-latency">-</span> ms</p>
+                    <p><strong>Packet Loss:</strong> <span id="network-packet-loss">-</span>%</p>
+                    <p><strong>Bitrate:</strong> <span id="network-bitrate">-</span> Kbps</p>
+                </div>
+            </div>
+            
+            <!-- Advanced Settings Tab -->
+            <div id="advanced-settings-tab" class="settings-tab-content">
+                <h3>Advanced Settings</h3>
+                <div class="form-group">
+                    <label for="advanced-codec">🎥 Video Codec</label>
+                    <select id="advanced-codec" onchange="updateVideoSettings()">
+                        <option value="vp8">VP8</option>
+                        <option value="vp9">VP9</option>
+                        <option value="h264" selected>H.264</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="advanced-dtx" onchange="updateVideoSettings()">
+                        <span>🔇 Discontinuous Transmission (DTX)</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="advanced-agc" checked onchange="updateVideoSettings()">
+                        <span>📊 Automatic Gain Control</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="advanced-aec" checked onchange="updateVideoSettings()">
+                        <span>🔊 Acoustic Echo Cancellation</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="advanced-ns" checked onchange="updateVideoSettings()">
+                        <span>🔇 Noise Suppression</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <button class="btn-secondary" onclick="testVideoSettings()" style="margin-top: 1rem;">🧪 Test Settings</button>
+                    <button class="btn-secondary" onclick="resetVideoSettings()" style="margin-top: 1rem; margin-left: 0.5rem;">🔄 Reset to Defaults</button>
+                </div>
+            </div>
+            
+            <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0;">
+                <button class="btn-primary" onclick="applyVideoCallSettings()">💾 Apply Settings</button>
+                <button class="btn-secondary" onclick="closeVideoCallSettings()" style="margin-left: 0.5rem;">Cancel</button>
             </div>
         </div>
     </div>
