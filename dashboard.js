@@ -2292,12 +2292,23 @@ async function startVideoCall(consultation) {
             ${scheduleSection}
         `;
         
-        // Display medication schedule if available
+        // Display medication schedule if available (for doctors to see patient's schedule)
         if (hasSchedule && patientEmail) {
-            const scheduleContainer = document.getElementById('call-medication-schedule');
-            if (scheduleContainer) {
-                displayMedicationSchedule(patientEmail, scheduleContainer);
-            }
+            setTimeout(() => {
+                const scheduleContainer = document.getElementById('call-medication-schedule');
+                if (scheduleContainer) {
+                    displayMedicationSchedule(patientEmail, scheduleContainer);
+                    console.log('✅ Medication schedule displayed for doctor');
+                }
+            }, 500);
+        } else if (patientEmail) {
+            // Even if no schedule, try to display (might be loading)
+            setTimeout(() => {
+                const scheduleContainer = document.getElementById('call-medication-schedule');
+                if (scheduleContainer) {
+                    displayMedicationSchedule(patientEmail, scheduleContainer);
+                }
+            }, 1000);
         }
     } else {
         // Fetch doctor info more reliably
@@ -2603,12 +2614,26 @@ function stopCallEndPolling() {
 let localStream = null;
 let peerConnection = null;
 let remoteStream = null;
+// Enhanced WebRTC configuration for better cross-device connectivity
 const pcConfig = {
     iceServers: [
+        // Google STUN servers (free, reliable)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-    ]
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        // Additional STUN servers for redundancy
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+        { urls: 'stun:stun.voiparound.com' },
+        { urls: 'stun:stun.voipbuster.com' },
+        { urls: 'stun:stun.voipstunt.com' },
+        { urls: 'stun:stun.voxgratia.org' }
+    ],
+    iceCandidatePoolSize: 10, // Pre-gather more candidates for better connectivity
+    iceTransportPolicy: 'all', // Allow both relay and direct connections
+    bundlePolicy: 'max-bundle', // Bundle RTP and RTCP together
+    rtcpMuxPolicy: 'require' // Require RTCP multiplexing
 };
 
 // Initialize video streams with WebRTC - Gracefully handles missing devices
@@ -3152,6 +3177,19 @@ async function startWebRTCConnection() {
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
             
+            // Wait a moment to ensure all tracks are properly added
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Verify tracks are in peer connection before creating offer
+            const sendersBeforeOffer = peerConnection.getSenders();
+            const audioSendersBefore = sendersBeforeOffer.filter(s => s.track && s.track.kind === 'audio');
+            const videoSendersBefore = sendersBeforeOffer.filter(s => s.track && s.track.kind === 'video');
+            
+            console.log(`📊 Peer connection state before offer:`);
+            console.log(`   - Total senders: ${sendersBeforeOffer.length}`);
+            console.log(`   - Audio senders: ${audioSendersBefore.length}`);
+            console.log(`   - Video senders: ${videoSendersBefore.length}`);
+            
             // Create offer with explicit audio/video requirements
             console.log('📞 Creating WebRTC offer...');
             const offer = await peerConnection.createOffer({
@@ -3171,19 +3209,39 @@ async function startWebRTCConnection() {
             
             if (!hasAudio || !hasVideo) {
                 console.warn('⚠️ WARNING: Offer may be missing audio or video media!');
+                console.warn('   This might cause connection issues. Check that tracks are properly added.');
             }
             
             await peerConnection.setLocalDescription(offer);
             console.log('✅ Local description set');
             
-            // Send offer via Socket.io
-            socket.emit('webrtcOffer', {
-                callId: currentCallId,
-                consultationId: currentConsultation ? currentConsultation.id : null,
-                offer: offer
-            });
+            // Send offer via Socket.io with retry logic
+            let offerSent = false;
+            const sendOffer = () => {
+                if (socket && socket.connected) {
+                    socket.emit('webrtcOffer', {
+                        callId: currentCallId,
+                        consultationId: currentConsultation ? currentConsultation.id : null,
+                        offer: offer
+                    });
+                    offerSent = true;
+                    console.log('📤 Offer sent via Socket.io to remote party');
+                } else {
+                    console.warn('⚠️ Socket not connected, retrying in 500ms...');
+                    setTimeout(sendOffer, 500);
+                }
+            };
             
-            console.log('📤 Offer sent via Socket.io to remote party');
+            sendOffer();
+            
+            // Also store offer locally as backup
+            if (typeof window !== 'undefined') {
+                window.lastWebRTCOffer = {
+                    offer: offer,
+                    callId: currentCallId,
+                    timestamp: Date.now()
+                };
+            }
         } else {
             // Patient waits for offer from doctor
             console.log('📥 Patient waiting for offer from doctor...');
@@ -4251,6 +4309,12 @@ async function endVideoCall() {
     const savedDoctorEmail = currentConsultation?.doctorEmail;
     currentCallId = null;
     currentConsultation = null;
+    
+    // Close settings modal if open before hiding call screen
+    const settingsModal = document.getElementById('video-call-settings-modal');
+    if (settingsModal && settingsModal.style.display !== 'none') {
+        closeVideoCallSettings();
+    }
     
     document.getElementById('video-call-screen').style.display = 'none';
     loadDashboard();

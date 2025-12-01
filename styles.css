@@ -2375,14 +2375,16 @@ body {
     width: 100%;
     flex: 1 1 0;
     min-height: 0;
-    aspect-ratio: 16/9;
+    aspect-ratio: 4/3;
+    max-height: calc(50% - 40px);
 }
 
 .local-video {
     width: 100%;
     flex: 1 1 0;
     min-height: 0;
-    aspect-ratio: 16/9;
+    aspect-ratio: 4/3;
+    max-height: calc(50% - 40px);
     pointer-events: auto;
 }
 
@@ -2571,44 +2573,78 @@ body {
     overflow-y: auto;
     overflow-x: hidden;
     max-height: 100%;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
     border-radius: 12px;
     padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Scrollbar styling for sidebar */
+.video-call-sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.video-call-sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.video-call-sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.video-call-sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .call-info-panel {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 1.5rem;
-    color: white;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .call-info-panel h3 {
     margin: 0 0 1rem 0;
     font-size: 1.1rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 #call-participant-details {
     font-size: 0.9rem;
     line-height: 1.6;
+    color: #ffffff;
 }
 
 #call-participant-details p {
     margin: 0.5rem 0;
-    color: rgba(255, 255, 255, 0.8);
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 #call-participant-details strong {
-    color: rgba(255, 255, 255, 0.95);
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.call-summary {
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Prescription Panel */
 .prescription-panel {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 1.25rem;
-    color: white;
+    color: #ffffff;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -2616,6 +2652,8 @@ body {
     max-height: 100%;
     overflow: hidden;
     gap: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .prescription-header {
@@ -2629,8 +2667,9 @@ body {
 .prescription-header h3 {
     margin: 0;
     font-size: 1.1rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: #ffffff;
     font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .prescription-header-actions {
@@ -2736,27 +2775,45 @@ body {
 
 .prescription-notice {
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     text-align: center;
-    color: rgba(255, 255, 255, 0.7);
+    color: #ffffff;
     font-size: 0.9rem;
     flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.prescription-notice p {
+    color: #ffffff;
+    margin: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Medication Schedule Styles */
 .medication-schedule-container {
     margin-top: 1rem;
     padding: 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    color: white;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .medication-schedule-container h4 {
     margin: 0 0 1rem 0;
     font-size: 1rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.medication-schedule-container p,
+.medication-schedule-container div {
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .medication-time-group {
