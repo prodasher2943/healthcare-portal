@@ -9,9 +9,6 @@ let onlineDoctors = new Set(); // Track online doctors
 document.addEventListener('DOMContentLoaded', function() {
     loadDashboard();
     initializeChatbot();
-    loadMedicineSchedule();
-    loadConsultationRequests();
-    loadConsultationHistory();
     initializeOnlineStatus();
     initializeTheme();
     loadSettings();
@@ -28,6 +25,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const endDateInput = document.getElementById('med-end-date');
     if (startDateInput) startDateInput.value = today;
     if (endDateInput) endDateInput.setAttribute('min', today);
+    
+    // Load user-specific data based on user type
+    const userData = JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+    if (userData) {
+        const userType = userData.user_type;
+        const isPatient = userType === 'Patient' || userType === 'patient' || userType?.toLowerCase() === 'patient';
+        
+        if (isPatient) {
+            // Load patient-specific data
+            loadMedicineSchedule();
+            // Main tab data is already loaded by loadDashboard
+        } else {
+            // Load doctor-specific data
+            loadConsultationRequests();
+            loadConsultationHistory();
+        }
+    }
     
     // Start polling for doctors to see new requests
     startDoctorRequestPolling();
@@ -1133,6 +1147,9 @@ async function loadAvailableDoctors() {
     let users = {};
     try {
         users = await getAllUsers();
+        // Merge with localStorage to ensure we have all doctors
+        const localUsers = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        users = { ...localUsers, ...users }; // localStorage takes precedence for local doctors
     } catch (error) {
         console.error('Error fetching users from server, falling back to localStorage:', error);
         users = JSON.parse(localStorage.getItem('usersDB') || '{}');
@@ -1142,6 +1159,15 @@ async function loadAvailableDoctors() {
     let consultations = [];
     try {
         consultations = await getConsultations(userData.email, userData.user_type);
+        // Merge with localStorage consultations
+        const localConsultations = JSON.parse(localStorage.getItem('consultations') || '[]');
+        const consultationMap = new Map();
+        [...localConsultations, ...consultations].forEach(c => {
+            if (!consultationMap.has(c.id) || new Date(c.createdAt || c.requestedDate) > new Date(consultationMap.get(c.id).createdAt || consultationMap.get(c.id).requestedDate)) {
+                consultationMap.set(c.id, c);
+            }
+        });
+        consultations = Array.from(consultationMap.values());
     } catch (error) {
         console.error('Error fetching consultations from server, falling back to localStorage:', error);
         consultations = JSON.parse(localStorage.getItem('consultations') || '[]');
@@ -1164,9 +1190,12 @@ async function loadAvailableDoctors() {
         // Keep existing onlineDoctors set from Socket.io events
     }
     
-    // Get all doctors and store in cache
+    // Get all doctors and store in cache - include ALL doctors regardless of online status
     allDoctorsCache = Object.keys(users)
-        .filter(email => users[email].user_type === 'Doctor')
+        .filter(email => {
+            const userType = users[email].user_type;
+            return userType === 'Doctor' || userType === 'doctor' || userType?.toLowerCase() === 'doctor';
+        })
         .map(email => ({
             email,
             ...users[email],
@@ -1180,6 +1209,8 @@ async function loadAvailableDoctors() {
                 ? users[email].user_data.experience 
                 : 0
         }));
+    
+    console.log(`📋 Loaded ${allDoctorsCache.length} total doctors into cache`);
     
     // Get doctors the patient has consulted with (any consultation status)
     consultedDoctorsCache = new Set();
@@ -1224,6 +1255,30 @@ function filterDoctors(searchQuery) {
     
     const query = searchQuery.toLowerCase().trim();
     
+    // Ensure allDoctorsCache is populated - load from localStorage if empty
+    if (allDoctorsCache.length === 0) {
+        const users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        allDoctorsCache = Object.keys(users)
+            .filter(email => {
+                const userType = users[email].user_type;
+                return userType === 'Doctor' || userType === 'doctor' || userType?.toLowerCase() === 'doctor';
+            })
+            .map(email => ({
+                email,
+                ...users[email],
+                doctorName: (users[email].user_data && users[email].user_data.name) 
+                    ? users[email].user_data.name 
+                    : (email.split('@')[0] || 'Unknown Doctor'),
+                specialization: (users[email].user_data && users[email].user_data.specialization) 
+                    ? users[email].user_data.specialization 
+                    : 'N/A',
+                experience: (users[email].user_data && users[email].user_data.experience) 
+                    ? users[email].user_data.experience 
+                    : 0
+            }));
+        console.log(`📋 Loaded ${allDoctorsCache.length} doctors from localStorage for search`);
+    }
+    
     // Refresh online doctors from API before filtering (to ensure latest status)
     // Do this in background - don't block search
     if (typeof getOnlineDoctors === 'function') {
@@ -1238,21 +1293,59 @@ function filterDoctors(searchQuery) {
         });
     }
     
-    // Search through ALL doctors (not just consulted/online)
+    // Search through ALL doctors (including offline ones)
     const filtered = allDoctorsCache.filter(doctor => {
-        const name = doctor.doctorName.toLowerCase();
-        const specialization = doctor.specialization.toLowerCase();
-        const email = doctor.email.toLowerCase();
+        const name = (doctor.doctorName || '').toLowerCase();
+        const specialization = (doctor.specialization || '').toLowerCase();
+        const email = (doctor.email || '').toLowerCase();
         const experience = String(doctor.experience || 0);
+        const bio = (doctor.user_data?.bio || '').toLowerCase();
         
         return name.includes(query) || 
                specialization.includes(query) || 
                email.includes(query) ||
-               experience.includes(query);
+               experience.includes(query) ||
+               bio.includes(query);
     });
     
     currentlyDisplayedDoctors = filtered;
     renderDoctors(filtered, true); // true indicates we're in search mode
+}
+
+// Show all registered doctors (online and offline)
+function showAllDoctors() {
+    // Ensure allDoctorsCache is populated
+    if (allDoctorsCache.length === 0) {
+        const users = JSON.parse(localStorage.getItem('usersDB') || '{}');
+        allDoctorsCache = Object.keys(users)
+            .filter(email => {
+                const userType = users[email].user_type;
+                return userType === 'Doctor' || userType === 'doctor' || userType?.toLowerCase() === 'doctor';
+            })
+            .map(email => ({
+                email,
+                ...users[email],
+                doctorName: (users[email].user_data && users[email].user_data.name) 
+                    ? users[email].user_data.name 
+                    : (email.split('@')[0] || 'Unknown Doctor'),
+                specialization: (users[email].user_data && users[email].user_data.specialization) 
+                    ? users[email].user_data.specialization 
+                    : 'N/A',
+                experience: (users[email].user_data && users[email].user_data.experience) 
+                    ? users[email].user_data.experience 
+                    : 0
+            }));
+    }
+    
+    // Clear search input
+    const searchInput = document.getElementById('doctor-search-input');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    // Show all doctors
+    currentlyDisplayedDoctors = [...allDoctorsCache];
+    renderDoctors(allDoctorsCache, true); // true to show it's a filtered view
 }
 
 // Render doctors list
@@ -1262,20 +1355,33 @@ function renderDoctors(doctors, isSearchMode = false) {
     if (!doctors || doctors.length === 0) {
         const message = isSearchMode 
             ? 'No doctors found matching your search. Try different keywords.'
-            : 'No doctors available at the moment. Use the search box to find doctors.';
+            : 'No doctors available at the moment. Use the search box to find all registered doctors.';
         doctorsContainer.innerHTML = `
             <div class="consultation-section">
                 <h3>👨‍⚕️ ${isSearchMode ? 'Search Results' : 'Available Doctors'}</h3>
                 <p>${message}</p>
+                ${!isSearchMode ? '<p style="color: #667eea; font-size: 0.9rem; margin-top: 0.5rem;">💡 Tip: Use the search box above to find all registered doctors, including offline ones.</p>' : ''}
             </div>
         `;
         return;
     }
     
+    // Get doctor ratings for display
+    const reviews = JSON.parse(localStorage.getItem('doctorReviews') || '[]');
+    const doctorRatings = {};
+    reviews.forEach(review => {
+        if (!doctorRatings[review.doctorEmail]) {
+            doctorRatings[review.doctorEmail] = { total: 0, count: 0, ratings: [] };
+        }
+        doctorRatings[review.doctorEmail].total += review.rating;
+        doctorRatings[review.doctorEmail].count += 1;
+        doctorRatings[review.doctorEmail].ratings.push(review.rating);
+    });
+    
     doctorsContainer.innerHTML = `
         <div class="consultation-section">
-            <h3>👨‍⚕️ ${isSearchMode ? 'Search Results' : 'Available Doctors'}</h3>
-            ${!isSearchMode ? '<p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">Previously consulted doctors are always shown. Use search to find other doctors.</p>' : ''}
+            <h3>👨‍⚕️ ${isSearchMode ? `Search Results (${doctors.length} found)` : 'Available Doctors'}</h3>
+            ${!isSearchMode ? '<p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">Previously consulted doctors are always shown. Use search to find all registered doctors.</p>' : `<p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">Showing all matching doctors (online and offline).</p>`}
             <div class="doctors-list">
                 ${doctors.map(doctor => {
                     const hasConsulted = consultedDoctorsCache.has(doctor.email);
@@ -1283,18 +1389,30 @@ function renderDoctors(doctors, isSearchMode = false) {
                     const doctorName = doctor.doctorName;
                     const specialization = doctor.specialization;
                     const experience = doctor.experience;
+                    const bio = doctor.user_data?.bio || '';
+                    
+                    // Calculate average rating
+                    const rating = doctorRatings[doctor.email];
+                    const avgRating = rating && rating.count > 0 
+                        ? (rating.total / rating.count).toFixed(1) 
+                        : null;
+                    const ratingStars = avgRating ? '⭐'.repeat(Math.round(parseFloat(avgRating))) : '';
                     
                     return `
                         <div class="doctor-card">
                             <div class="doctor-card-header">
                                 <h4>Dr. ${doctorName}</h4>
-                                ${isOnline ? '<span class="online-badge">🟢 Online</span>' : '<span class="offline-badge">⚫ Offline</span>'}
-                                ${hasConsulted ? '<span class="consulted-badge">✓ Previously Consulted</span>' : ''}
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                                    ${isOnline ? '<span class="online-badge">🟢 Online</span>' : '<span class="offline-badge">⚫ Offline</span>'}
+                                    ${hasConsulted ? '<span class="consulted-badge">✓ Previously Consulted</span>' : ''}
+                                    ${avgRating ? `<span style="background: #ffd700; color: #333; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600;">${ratingStars} ${avgRating} (${rating.count})</span>` : ''}
+                                </div>
                             </div>
                             <p><strong>Specialization:</strong> ${specialization}</p>
                             <p><strong>Experience:</strong> ${experience} years</p>
-                            <p><strong>Email:</strong> ${doctor.email}</p>
-                            <button class="btn-primary" onclick="requestConsultation('${doctor.email}')">
+                            ${bio ? `<p style="color: #666; font-size: 0.9rem; margin-top: 0.5rem;"><em>${bio.substring(0, 100)}${bio.length > 100 ? '...' : ''}</em></p>` : ''}
+                            <p style="margin-top: 0.5rem;"><strong>Email:</strong> ${doctor.email}</p>
+                            <button class="btn-primary" onclick="requestConsultation('${doctor.email}')" style="margin-top: 1rem;">
                                 ${hasConsulted ? 'Request Consultation Again' : 'Request Consultation'}
                             </button>
                         </div>
@@ -4640,10 +4758,22 @@ function switchPatientTab(tabName) {
     }
     
     // Activate tab button
-    event?.target?.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        // Fallback: find and activate the correct tab button
+        document.querySelectorAll('.dashboard-tab').forEach(tab => {
+            if (tab.textContent.toLowerCase().includes(tabName.toLowerCase().slice(0, 3))) {
+                tab.classList.add('active');
+            }
+        });
+    }
     
     // Load data when switching tabs
-    if (tabName === 'appointments') {
+    if (tabName === 'main') {
+        // Main tab - ensure medicine schedule is loaded
+        loadMedicineSchedule();
+    } else if (tabName === 'appointments') {
         loadAppointments();
     } else if (tabName === 'records') {
         loadMedicalRecords();
@@ -4677,10 +4807,23 @@ function switchDoctorTab(tabName) {
     }
     
     // Activate tab button
-    event?.target?.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        // Fallback: find and activate the correct tab button
+        document.querySelectorAll('.dashboard-tab').forEach(tab => {
+            if (tab.textContent.toLowerCase().includes(tabName.toLowerCase().slice(0, 3))) {
+                tab.classList.add('active');
+            }
+        });
+    }
     
     // Load data when switching tabs
-    if (tabName === 'calendar') {
+    if (tabName === 'main') {
+        // Main tab - ensure consultation requests and history are loaded
+        loadConsultationRequests();
+        loadConsultationHistory();
+    } else if (tabName === 'calendar') {
         loadAppointmentCalendar();
     } else if (tabName === 'patients') {
         loadMyPatients();
