@@ -2185,6 +2185,22 @@ async function startVideoCall(consultation) {
         }
     }, 100);
     
+    // CRITICAL: Test TURN servers before starting call (for cross-device connectivity)
+    console.log('🧪 Testing TURN server connectivity for cross-device calls...');
+    if (typeof window.testTURNServers === 'function') {
+        try {
+            const turnWorking = await window.testTURNServers();
+            if (!turnWorking) {
+                console.warn('⚠️ WARNING: TURN servers not accessible!');
+                console.warn('   Cross-device calls may fail. Same-device calls should still work.');
+                console.warn('   To test again, run: testTURNServers()');
+            }
+        } catch (err) {
+            console.warn('⚠️ TURN server test failed:', err);
+            console.warn('   Proceeding anyway - call may still work if devices are on same network');
+        }
+    }
+    
     // CRITICAL: Initialize video streams BEFORE proceeding with other setup
     // This ensures tracks are ready before WebRTC offer/answer
     console.log('🎥 Initializing video streams...');
@@ -2631,15 +2647,20 @@ let peerConnection = null;
 let remoteStream = null;
 // Enhanced WebRTC configuration for better cross-device connectivity
 // CRITICAL: TURN servers are ESSENTIAL for NAT traversal across different devices/networks
+// Using multiple TURN servers for redundancy - if one fails, others will be tried
 const pcConfig = {
     iceServers: [
         // Google STUN servers (for NAT discovery)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
         
-        // CRITICAL: TURN servers for relay when direct connection fails (cross-device)
-        // Using free public TURN servers - these relay traffic when NAT traversal fails
+        // CRITICAL: Multiple TURN servers for relay when direct connection fails (cross-device)
+        // Try multiple free/public TURN servers - browser will use the first one that works
+        
+        // Option 1: Metered.ca TURN servers (most reliable free option)
         {
             urls: [
                 'turn:openrelay.metered.ca:80',
@@ -2660,20 +2681,99 @@ const pcConfig = {
             username: 'openrelayproject',
             credential: 'openrelayproject'
         },
-        // Additional free TURN server
+        
+        // Option 2: ExpressTurn (backup)
         {
-            urls: 'turn:relay1.expressturn.com:3478',
+            urls: [
+                'turn:relay1.expressturn.com:3478',
+                'turn:relay1.expressturn.com:3478?transport=tcp'
+            ],
             username: 'efJw0GfV4f47b3b4b3b4b3',
             credential: 'efJw0GfV4f47b3b4b3b4b3'
         },
+        
+        // Option 3: Additional free TURN servers
+        {
+            urls: [
+                'turn:relay2.expressturn.com:3478',
+                'turn:relay2.expressturn.com:3478?transport=tcp'
+            ],
+            username: 'efJw0GfV4f47b3b4b3b4b3',
+            credential: 'efJw0GfV4f47b3b4b3b4b3'
+        },
+        
+        // Option 4: Twilio's free STUN (no TURN, but helps with discovery)
+        { urls: 'stun:global.stun.twilio.com:3478?transport=udp' },
+        { urls: 'stun:global.stun.twilio.com:3478?transport=tcp' },
+        
         // Backup STUN servers
         { urls: 'stun:stun.stunprotocol.org:3478' },
-        { urls: 'stun:stun.voiparound.com' }
+        { urls: 'stun:stun.voiparound.com' },
+        { urls: 'stun:stun.voipbuster.com' }
     ],
     iceCandidatePoolSize: 10, // Pre-gather more candidates for better connectivity
     iceTransportPolicy: 'all', // CRITICAL: Allow both relay (TURN) and direct connections
     bundlePolicy: 'max-bundle', // Bundle RTP and RTCP together
     rtcpMuxPolicy: 'require' // Require RTCP multiplexing
+};
+
+// Function to test TURN server connectivity
+window.testTURNServers = async function() {
+    console.log('🧪 Testing TURN server connectivity...');
+    
+    const testPC = new RTCPeerConnection(pcConfig);
+    let relayCandidatesFound = false;
+    let testTimeout;
+    
+    return new Promise((resolve) => {
+        testPC.onicecandidate = (event) => {
+            if (event.candidate) {
+                const candidate = event.candidate.candidate;
+                if (candidate.includes('typ relay')) {
+                    relayCandidatesFound = true;
+                    console.log('✅ TURN server working! Found RELAY candidate:', candidate.substring(0, 100));
+                    clearTimeout(testTimeout);
+                    testPC.close();
+                    resolve(true);
+                }
+            } else {
+                // ICE gathering complete
+                clearTimeout(testTimeout);
+                setTimeout(() => {
+                    if (!relayCandidatesFound) {
+                        console.error('❌ No TURN relay candidates found!');
+                        console.error('   This means TURN servers are not accessible.');
+                        console.error('   Cross-device calls will likely fail.');
+                        console.error('   Possible causes:');
+                        console.error('   1) Network firewall blocking TURN traffic');
+                        console.error('   2) TURN servers are down or rate-limited');
+                        console.error('   3) Browser blocking TURN connections');
+                    }
+                    testPC.close();
+                    resolve(relayCandidatesFound);
+                }, 2000);
+            }
+        };
+        
+        // Create a dummy data channel to trigger ICE gathering
+        testPC.createDataChannel('test');
+        testPC.createOffer().then(offer => {
+            testPC.setLocalDescription(offer);
+        }).catch(err => {
+            console.error('Error creating test offer:', err);
+            testPC.close();
+            resolve(false);
+        });
+        
+        // Timeout after 10 seconds
+        testTimeout = setTimeout(() => {
+            if (!relayCandidatesFound) {
+                console.warn('⚠️ TURN test timed out - servers may not be accessible');
+                testPC.close();
+                resolve(false);
+            }
+        }, 10000);
+    });
 };
 
 // Initialize video streams with WebRTC - Gracefully handles missing devices
@@ -2917,6 +3017,12 @@ function createPeerConnection() {
     }
     
     peerConnection = new RTCPeerConnection(pcConfig);
+    
+    // Log TURN server configuration for debugging
+    console.log('🔧 Peer connection created with ICE servers:', pcConfig.iceServers.length);
+    const turnServers = pcConfig.iceServers.filter(s => s.urls && (Array.isArray(s.urls) ? s.urls.some(u => u.includes('turn:')) : s.urls.includes('turn:')));
+    console.log(`   - ${turnServers.length} TURN server(s) configured`);
+    console.log(`   - ${pcConfig.iceServers.length - turnServers.length} STUN server(s) configured`);
     
     // CRITICAL: Initialize remoteStream BEFORE any tracks arrive
     if (!remoteStream) {
@@ -3500,11 +3606,19 @@ function createPeerConnection() {
                 console.log(`📊 ICE gathering complete: ${relayCount} RELAY, ${srflxCount} SRFLX, ${hostCount} HOST candidates`);
                 
                 if (relayCount === 0) {
-                    console.warn('⚠️ WARNING: No RELAY (TURN) candidates gathered!');
-                    console.warn('   Cross-device calls may fail if NAT traversal is required.');
-                    console.warn('   Check: TURN server configuration and network accessibility.');
+                    console.error('❌ CRITICAL: No RELAY (TURN) candidates gathered!');
+                    console.error('   Cross-device calls WILL FAIL without TURN relay.');
+                    console.error('   Possible issues:');
+                    console.error('   1) Network firewall blocking TURN servers (ports 80, 443, 3478)');
+                    console.error('   2) TURN servers are down or rate-limited');
+                    console.error('   3) Browser security policy blocking TURN');
+                    console.error('   Solution: Test TURN servers by running: testTURNServers()');
+                    console.error('   If test fails, you may need to:');
+                    console.error('   - Configure firewall to allow TURN traffic');
+                    console.error('   - Use a different TURN server');
+                    console.error('   - Set up your own TURN server');
                 } else {
-                    console.log('✅ TURN relay candidates available - cross-device connectivity should work!');
+                    console.log(`✅ ${relayCount} TURN relay candidate(s) available - cross-device connectivity should work!`);
                 }
             }
         }
