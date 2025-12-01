@@ -1618,6 +1618,45 @@ async function requestConsultation(doctorEmail) {
     console.log('Sending consultation request:', consultation);
     console.log('Doctor email (target):', doctorEmail);
     
+    // CRITICAL: Ensure patient account exists on server before creating consultation
+    // This allows cross-device login after sending a consultation request
+    try {
+        // Check if user exists on server
+        const serverUsers = await getAllUsers();
+        const userExistsOnServer = serverUsers && serverUsers[userData.email];
+        
+        if (!userExistsOnServer) {
+            console.log('⚠️ User account not found on server - registering now for cross-device access...');
+            
+            // Get user data from localStorage
+            const usersDB = JSON.parse(localStorage.getItem('usersDB') || '{}');
+            const localUser = usersDB[userData.email];
+            
+            if (localUser && typeof registerUserOnServer === 'function') {
+                try {
+                    // Register user on server with their existing data
+                    await registerUserOnServer(
+                        userData.email,
+                        localUser.user_data || patientData,
+                        'Patient',
+                        localUser.password // Use existing password hash
+                    );
+                    console.log('✅ User account registered on server for cross-device access');
+                } catch (regError) {
+                    console.error('⚠️ Failed to register user on server:', regError);
+                    // Continue anyway - consultation can still be created
+                }
+            } else {
+                console.warn('⚠️ Cannot register user - missing user data or registerUserOnServer function');
+            }
+        } else {
+            console.log('✅ User account already exists on server');
+        }
+    } catch (error) {
+        console.error('⚠️ Error checking/registering user on server:', error);
+        // Continue anyway - consultation can still be created
+    }
+    
     // Save consultation via API (with localStorage fallback)
     try {
         const savedConsultation = await createConsultation(consultation);
