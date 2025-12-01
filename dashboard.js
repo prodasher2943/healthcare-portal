@@ -2438,6 +2438,11 @@ async function startVideoCall(consultation) {
                 console.log(`📤 Adding ${track.kind} track to peer connection`);
                 try {
                     peerConnection.addTrack(track, localStream);
+                    // Ensure new tracks respect current mute state
+                    if (track.kind === 'audio' && isMicMuted) {
+                        track.enabled = false;
+                        console.log(`🔇 New audio track ${track.id} added but muted (respecting mute state)`);
+                    }
                 } catch (err) {
                     console.error(`Error adding ${track.kind} track:`, err);
                 }
@@ -2684,13 +2689,24 @@ async function initializeVideoStreams() {
                 console.log(`  - Adding ${track.kind} track (${track.id})`);
                 try {
                     peerConnection.addTrack(track, stream);
+                    // Ensure new tracks respect current mute state
+                    if (track.kind === 'audio' && isMicMuted) {
+                        track.enabled = false;
+                        console.log(`🔇 New audio track ${track.id} added but muted (respecting mute state)`);
+                    }
                 } catch (err) {
                     console.error(`Error adding ${track.kind} track:`, err);
                     // If error is about duplicate track, try to replace existing one
                     const existingSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
                     if (existingSender) {
                         console.log(`  - Replacing existing ${track.kind} track`);
-                        existingSender.replaceTrack(track).catch(replaceErr => {
+                        existingSender.replaceTrack(track).then(() => {
+                            // Ensure replaced tracks respect current mute state
+                            if (track.kind === 'audio' && isMicMuted) {
+                                track.enabled = false;
+                                console.log(`🔇 Replaced audio track ${track.id} muted (respecting mute state)`);
+                            }
+                        }).catch(replaceErr => {
                             console.error(`Error replacing ${track.kind} track:`, replaceErr);
                         });
                     }
@@ -3019,6 +3035,11 @@ async function startWebRTCConnection() {
                         try {
                             // Add track with the same stream reference
                             peerConnection.addTrack(track, localStream);
+                    // Ensure new tracks respect current mute state
+                    if (track.kind === 'audio' && isMicMuted) {
+                        track.enabled = false;
+                        console.log(`🔇 New audio track ${track.id} added but muted (respecting mute state)`);
+                    }
                             console.log(`✅ ${track.kind} track added successfully`);
                         } catch (err) {
                             console.error(`❌ Error adding ${track.kind} track:`, err);
@@ -3246,9 +3267,49 @@ function toggleMicrophone() {
     }
     
     isMicMuted = !isMicMuted;
+    
+    // Disable/enable tracks in local stream
     audioTracks.forEach(track => {
         track.enabled = !isMicMuted;
+        console.log(`🎤 Audio track ${track.id} ${isMicMuted ? 'disabled' : 'enabled'}`);
     });
+    
+    // CRITICAL: Also update peer connection senders to ensure audio is truly muted
+    if (peerConnection) {
+        const senders = peerConnection.getSenders();
+        senders.forEach(sender => {
+            if (sender.track && sender.track.kind === 'audio') {
+                // Update the track in the sender - this is the key fix
+                sender.track.enabled = !isMicMuted;
+                console.log(`🔌 Peer connection audio sender ${sender.track.id} ${isMicMuted ? 'disabled' : 'enabled'}`);
+            }
+        });
+        
+        // Double-check: Verify all audio tracks are properly muted
+        const allAudioTracks = localStream.getAudioTracks();
+        const allMuted = allAudioTracks.every(track => !track.enabled);
+        if (isMicMuted && !allMuted) {
+            console.warn('⚠️ Some audio tracks are still enabled, forcing mute...');
+            allAudioTracks.forEach(track => {
+                track.enabled = false;
+            });
+            // Also force mute in peer connection senders
+            senders.forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    sender.track.enabled = false;
+                }
+            });
+        }
+    }
+    
+    // Also check screen share stream if it exists (it might have audio)
+    if (screenShareStream) {
+        const screenAudioTracks = screenShareStream.getAudioTracks();
+        screenAudioTracks.forEach(track => {
+            track.enabled = !isMicMuted;
+            console.log(`🖥️ Screen share audio track ${track.id} ${isMicMuted ? 'disabled' : 'enabled'}`);
+        });
+    }
     
     // Update button appearance
     const micBtn = document.getElementById('toggle-mic-btn');
@@ -3265,7 +3326,7 @@ function toggleMicrophone() {
         }
     }
     
-    console.log(`Microphone ${isMicMuted ? 'muted' : 'unmuted'}`);
+    console.log(`Microphone ${isMicMuted ? 'muted' : 'unmuted'} - All tracks updated`);
 }
 
 function toggleCamera() {
@@ -3374,6 +3435,19 @@ async function switchCamera() {
             if (sender) {
                 await sender.replaceTrack(newVideoTrack);
                 console.log('✅ Video track replaced in peer connection');
+                
+                // Ensure audio tracks still respect mute state after camera switch
+                if (peerConnection && isMicMuted) {
+                    const audioSenders = peerConnection.getSenders().filter(s => 
+                        s.track && s.track.kind === 'audio'
+                    );
+                    audioSenders.forEach(audioSender => {
+                        if (audioSender.track) {
+                            audioSender.track.enabled = false;
+                            console.log(`🔇 Audio track ${audioSender.track.id} kept muted after camera switch`);
+                        }
+                    });
+                }
             }
         }
         
@@ -3935,6 +4009,22 @@ async function toggleScreenShare() {
                 );
                 if (sender) {
                     await sender.replaceTrack(screenShareStream.getVideoTracks()[0]);
+                }
+                
+                // Handle screen share audio tracks - respect mute state
+                const screenAudioTracks = screenShareStream.getAudioTracks();
+                if (screenAudioTracks.length > 0) {
+                    const audioSender = peerConnection.getSenders().find(s => 
+                        s.track && s.track.kind === 'audio'
+                    );
+                    if (audioSender && screenAudioTracks[0]) {
+                        await audioSender.replaceTrack(screenAudioTracks[0]);
+                        // Respect mute state
+                        if (isMicMuted) {
+                            screenAudioTracks[0].enabled = false;
+                            console.log(`🔇 Screen share audio track muted`);
+                        }
+                    }
                 }
             }
             
